@@ -7,9 +7,10 @@ import { ViabilityDashboardTab } from './pages/ViabilityDashboardTab';
 import { ProjectComparisonTab } from './pages/ProjectComparisonTab';
 import { ImportTab } from './pages/ImportTab';
 import { DataQueryTab } from './pages/DataQueryTab';
-import { DRETransaction, GlobalFinancialSettings, ProjectContract } from './types/dre';
+import { DRETransaction, GlobalFinancialSettings, ProjectContract, SyncStatus } from './types/dre';
 import { INITIAL_PROJECTS, INITIAL_SETTINGS, generateInitialTransactions } from './services/initialData';
 import { calculateMonthlyDRE } from './services/dreCalculator';
+import { storageService, isFirebaseConfigured } from './services/firebaseConfig';
 
 const DATA_VERSION = 'v3.0_financial_status_nomenclatures';
 
@@ -17,6 +18,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'realizado' | 'projetado' | 'previsto_inicial'>('all');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(isFirebaseConfigured ? 'synced' : 'offline');
 
   const [settings, setSettings] = useState<GlobalFinancialSettings>(() => {
     const saved = localStorage.getItem('dre_settings');
@@ -31,28 +33,43 @@ export function App() {
   const [transactions, setTransactions] = useState<DRETransaction[]>(() => {
     const savedVersion = localStorage.getItem('dre_data_version');
     const saved = localStorage.getItem('dre_transactions');
-    
+
     if (savedVersion === DATA_VERSION && saved) {
       return JSON.parse(saved);
     }
-    
+
     localStorage.setItem('dre_data_version', DATA_VERSION);
     const initial = generateInitialTransactions();
     localStorage.setItem('dre_transactions', JSON.stringify(initial));
     return initial;
   });
 
-  // Save changes to localStorage
+  // Save & Sync Data
   useEffect(() => {
-    localStorage.setItem('dre_settings', JSON.stringify(settings));
+    const syncData = async () => {
+      setSyncStatus('syncing');
+      await storageService.saveSettings(settings);
+      setSyncStatus(isFirebaseConfigured ? 'synced' : 'offline');
+    };
+    syncData();
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem('dre_projects', JSON.stringify(projects));
+    const syncData = async () => {
+      setSyncStatus('syncing');
+      await storageService.saveProjects(projects);
+      setSyncStatus(isFirebaseConfigured ? 'synced' : 'offline');
+    };
+    syncData();
   }, [projects]);
 
   useEffect(() => {
-    localStorage.setItem('dre_transactions', JSON.stringify(transactions));
+    const syncData = async () => {
+      setSyncStatus('syncing');
+      await storageService.saveTransactions(transactions);
+      setSyncStatus(isFirebaseConfigured ? 'synced' : 'offline');
+    };
+    syncData();
   }, [transactions]);
 
   const handleUpdateSettings = (newSettings: Partial<GlobalFinancialSettings>) => {
@@ -128,6 +145,7 @@ export function App() {
           onSelectProject={setSelectedProject}
           statusFilter={statusFilter}
           onSelectStatusFilter={setStatusFilter}
+          syncStatus={syncStatus}
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
         />

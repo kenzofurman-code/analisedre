@@ -10,7 +10,6 @@ export interface StorageAdapter {
   saveSettings: (settings: any) => Promise<void>;
 }
 
-// Configuração lida das variáveis de ambiente do Vite/Vercel (VITE_FIREBASE_*)
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -21,11 +20,10 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const isFirebaseConfigured = Boolean(
+export const isFirebaseConfigured = Boolean(
   import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_PROJECT_ID
 );
 
-// Firebase Initialization
 const app = isFirebaseConfigured
   ? getApps().length > 0
     ? getApp()
@@ -34,7 +32,6 @@ const app = isFirebaseConfigured
 
 export const db = app ? getFirestore(app) : null;
 
-// Firestore Database Adapter
 class FirestoreStorageAdapter implements StorageAdapter {
   async getTransactions(): Promise<any[]> {
     if (!db) {
@@ -44,10 +41,9 @@ class FirestoreStorageAdapter implements StorageAdapter {
     try {
       const querySnapshot = await getDocs(collection(db, 'transactions'));
       const txs: any[] = [];
-      querySnapshot.forEach((doc) => txs.push(doc.data()));
+      querySnapshot.forEach((docSnapshot: any) => txs.push(docSnapshot.data()));
       return txs;
     } catch (err) {
-      console.warn('Fallback para localStorage (Firestore erro):', err);
       const data = localStorage.getItem('dre_transactions');
       return data ? JSON.parse(data) : [];
     }
@@ -74,7 +70,7 @@ class FirestoreStorageAdapter implements StorageAdapter {
     try {
       const querySnapshot = await getDocs(collection(db, 'projects'));
       const projects: any[] = [];
-      querySnapshot.forEach((doc) => projects.push(doc.data()));
+      querySnapshot.forEach((docSnapshot: any) => projects.push(docSnapshot.data()));
       return projects;
     } catch (err) {
       const data = localStorage.getItem('dre_projects');

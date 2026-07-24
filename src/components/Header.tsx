@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { GlobalFinancialSettings, ProjectContract } from '../types/dre';
+import { GlobalFinancialSettings, ProjectContract, SyncStatus } from '../types/dre';
 import { SettingsDrawer } from './SettingsDrawer';
-import { Building, Filter, Sliders } from 'lucide-react';
+import { Building, Filter, Sliders, RefreshCw } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
@@ -11,6 +11,7 @@ interface HeaderProps {
   onSelectProject: (proj: string) => void;
   statusFilter: 'all' | 'realizado' | 'projetado' | 'previsto_inicial';
   onSelectStatusFilter: (status: 'all' | 'realizado' | 'projetado' | 'previsto_inicial') => void;
+  syncStatus: SyncStatus;
   settings: GlobalFinancialSettings;
   onUpdateSettings: (newSettings: Partial<GlobalFinancialSettings>) => void;
 }
@@ -23,10 +24,51 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectProject,
   statusFilter,
   onSelectStatusFilter,
+  syncStatus,
   settings,
   onUpdateSettings,
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+
+  const renderSyncBadge = () => {
+    if (syncStatus === 'syncing') {
+      return (
+        <div
+          className="flex items-center space-x-1.5 bg-blue-950/50 border border-blue-500/50 text-blue-400 px-3 py-1 rounded-full text-xs font-semibold shadow-xs"
+          title="Sincronizando dados com o banco de dados Firebase..."
+        >
+          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          <span>Sincronizando...</span>
+        </div>
+      );
+    }
+
+    if (syncStatus === 'offline') {
+      return (
+        <div
+          className="flex items-center space-x-1.5 bg-amber-950/50 border border-amber-500/50 text-amber-400 px-3 py-1 rounded-full text-xs font-semibold shadow-xs"
+          title="Modo LocalStorage: Operando com dados salvos no navegador"
+        >
+          <div className="w-4 h-4 rounded bg-amber-500 text-dark-900 flex items-center justify-center font-bold text-[10px]">
+            !
+          </div>
+          <span>Modo Offline</span>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="flex items-center space-x-1.5 bg-emerald-950/50 border border-emerald-500/50 text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold shadow-xs"
+        title="Dados sincronizados com o banco de dados Firebase Cloud"
+      >
+        <div className="w-4 h-4 rounded bg-emerald-500 text-dark-900 flex items-center justify-center font-bold text-[10px]">
+          ✓
+        </div>
+        <span>Sincronizado</span>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -59,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({
               </select>
             </div>
 
-            {/* Status Filter (Realizado + Projetado vs Realizado vs Projetado vs Previsto Inicial) */}
+            {/* Status Filter */}
             <div className="flex items-center space-x-1 bg-slate-900/80 border border-slate-700/60 rounded-xl p-1 shadow-inner">
               <Filter className="w-3.5 h-3.5 text-slate-400 ml-1.5" />
               <button
@@ -100,7 +142,10 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* BUTTON TO OPEN RIGHT SLIDING SETTINGS DRAWER */}
+            {/* SYNC STATUS BADGE (PLACED BETWEEN FILTERS AND SETTINGS BUTTON) */}
+            {renderSyncBadge()}
+
+            {/* Settings Drawer Trigger Button */}
             <button
               onClick={() => setIsDrawerOpen(true)}
               className="flex items-center space-x-2 px-3.5 py-1.5 bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/40 text-blue-300 font-semibold text-xs rounded-xl shadow-md transition-all hover:border-blue-400"

@@ -32,6 +32,7 @@ export interface DRELineDefinition {
 }
 
 export type TransactionStatus = 'realizado' | 'projetado' | 'previsto_inicial';
+export type SyncStatus = 'synced' | 'syncing' | 'offline';
 
 export interface DRETransaction {
   id: string;
@@ -39,8 +40,8 @@ export interface DRETransaction {
   date: string;
   dreLineKey: DRELineKey;
   amount: number;
-  originalAmount?: number; // Valor original importado antes de edições manuais
-  isEdited?: boolean; // Flag indicando se o lançamento foi modificado manualmente
+  originalAmount?: number;
+  isEdited?: boolean;
   status: TransactionStatus;
   isAutoForecast?: boolean;
   description?: string;
