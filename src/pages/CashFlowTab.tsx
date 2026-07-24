@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { MonthlyDREColumn } from '../types/dre';
 import {
-  BarChart,
   Bar,
   XAxis,
   YAxis,
@@ -20,7 +19,6 @@ interface CashFlowTabProps {
 }
 
 export const CashFlowTab: React.FC<CashFlowTabProps> = ({ monthlyColumns, selectedProject }) => {
-  // Filter columns to ONLY show the active period that contains financial information/movement
   const activeColumns = useMemo(() => {
     if (monthlyColumns.length === 0) return [];
 
@@ -51,7 +49,6 @@ export const CashFlowTab: React.FC<CashFlowTabProps> = ({ monthlyColumns, select
     return monthlyColumns.slice(firstIdx, lastIdx + 1);
   }, [monthlyColumns]);
 
-  // Compute cash flow monthly data and cumulative balance
   const cashFlowData = useMemo(() => {
     let runningBalance = 0;
 
@@ -164,7 +161,7 @@ export const CashFlowTab: React.FC<CashFlowTabProps> = ({ monthlyColumns, select
               <YAxis stroke="#64748B" fontSize={11} tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '12px' }}
-                formatter={(val: number) => formatMoney(val)}
+                formatter={(val: any) => formatMoney(Number(val || 0))}
               />
               <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
               <Bar dataKey="inflow" name="Entradas (Receitas)" fill="#10B981" radius={[4, 4, 0, 0]} />
