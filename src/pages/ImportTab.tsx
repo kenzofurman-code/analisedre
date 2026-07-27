@@ -23,8 +23,6 @@ import {
   SlidersHorizontal,
   XCircle,
   Building2,
-  Calendar,
-  DollarSign,
   Briefcase,
   Layers,
 } from 'lucide-react';
@@ -238,6 +236,85 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
     setLineCategoryMapping((prev) => ({ ...prev, [label]: value }));
   };
 
+  // Helper Renderer for 4 Specific Cost Lines requested by user
+  const render4CostLines = (p: ProjectContract) => {
+    // Line 1: Orçamento Raso (Reajustado vs Projeção Atual)
+    const baseRaso = p.orcamentoRasoReajustado || 0;
+    const projRaso = p.projecaoRasoAtual !== undefined ? p.projecaoRasoAtual : baseRaso;
+    const hasRasoDiff = baseRaso > 0 && Math.abs(projRaso - baseRaso) > 0.01;
+    const isRasoIncrease = projRaso > baseRaso;
+
+    // Line 2: Resultado Raso
+    const resultRaso = p.resultadoRasoAtual !== undefined ? p.resultadoRasoAtual : (baseRaso - projRaso);
+
+    // Line 3: Custo Total (Reajustado vs Projeção Total)
+    const baseTotal = p.orcamentoTotalReajustado || p.contractValue || 0;
+    const projTotal = p.projectedCostAtCompletion !== undefined ? p.projectedCostAtCompletion : baseTotal;
+    const hasTotalDiff = baseTotal > 0 && Math.abs(projTotal - baseTotal) > 0.01;
+    const isTotalIncrease = projTotal > baseTotal;
+
+    // Line 4: Resultado Total
+    const resultTotal = p.resultAtCompletion !== undefined ? p.resultAtCompletion : (baseTotal - projTotal);
+
+    return (
+      <div className="space-y-2 text-[11px] bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+        {/* Linha 1: Orçamento Raso */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+          <span className="text-slate-400 font-semibold">1. Orçamento Raso:</span>
+          <div className="font-mono font-bold flex items-center space-x-1.5">
+            <span className="text-slate-300">{formatMoney(baseRaso)}</span>
+            {hasRasoDiff && (
+              <>
+                <span className="text-slate-500">➡️</span>
+                <span className={isRasoIncrease ? 'text-rose-400' : 'text-emerald-400'}>
+                  {formatMoney(projRaso)}
+                </span>
+                <span title={isRasoIncrease ? 'Aumento de custo raso' : 'Redução de custo raso'}>
+                  {isRasoIncrease ? '🔺' : '🔻'}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Linha 2: Resultado Raso */}
+        <div className="flex justify-between items-center pt-1 border-t border-slate-800/60">
+          <span className="text-slate-400 font-semibold">2. Resultado Raso:</span>
+          <span className={`font-mono font-bold ${resultRaso >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {formatMoney(resultRaso)}
+          </span>
+        </div>
+
+        {/* Linha 3: Custo Total */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pt-1 border-t border-slate-800/60">
+          <span className="text-slate-400 font-semibold">3. Custo Total:</span>
+          <div className="font-mono font-bold flex items-center space-x-1.5">
+            <span className="text-slate-300">{formatMoney(baseTotal)}</span>
+            {hasTotalDiff && (
+              <>
+                <span className="text-slate-500">➡️</span>
+                <span className={isTotalIncrease ? 'text-rose-400' : 'text-emerald-400'}>
+                  {formatMoney(projTotal)}
+                </span>
+                <span title={isTotalIncrease ? 'Aumento de custo total' : 'Redução de custo total'}>
+                  {isTotalIncrease ? '🔺' : '🔻'}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Linha 4: Resultado Total */}
+        <div className="flex justify-between items-center pt-1 border-t border-slate-800/60">
+          <span className="text-slate-400 font-semibold">4. Resultado Total:</span>
+          <span className={`font-mono font-bold ${resultTotal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {formatMoney(resultTotal)}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Step Progress & Mode Selector Header */}
@@ -308,7 +385,7 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
             </h4>
             <p className="text-xs text-slate-400 max-w-md mx-auto mb-5">
               {importCategoryMode === 'projects_register'
-                ? 'Extraia o cadastro inicial de todas as obras, prazos, contratos, orçamentos, bandas, multas e prêmios de economia.'
+                ? 'Extraia o cadastro inicial de todas as obras, prazos, contratos, orçamentos rasos, custos totais, resultados e cláusulas.'
                 : 'Selecione o arquivo de custos de MO, receitas de taxa ADM, contratos ou viabilidade.'}
             </p>
             <label
@@ -358,7 +435,7 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               </button>
             </div>
 
-            {/* Grid of Extracted Projects Cards */}
+            {/* Grid of Extracted Projects Cards with 4 Cost Lines */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[550px] overflow-y-auto pr-1">
               {extractedProjects.map((p) => (
                 <div key={p.name} className="glass-panel p-4 rounded-xl border border-slate-800 space-y-3 hover:border-slate-700 transition-all">
@@ -400,26 +477,12 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
                     </div>
                   </div>
 
-                  <div className="space-y-1 text-[11px]">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Orçamento Raso Reajustado:</span>
-                      <span className="font-mono text-slate-300 font-semibold">{formatMoney(p.orcamentoRasoReajustado)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Projeção Custo Final (PMG):</span>
-                      <span className="font-mono text-rose-300 font-semibold">{formatMoney(p.projectedCostAtCompletion)}</span>
-                    </div>
-                    <div className="flex justify-between pt-1 border-t border-slate-800">
-                      <span className="font-bold text-slate-300">Resultado Projetado:</span>
-                      <span className={`font-mono font-bold ${(p.resultAtCompletion || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {formatMoney(p.resultAtCompletion)}
-                      </span>
-                    </div>
-                  </div>
+                  {/* RENDER THE 4 SPECIFIC COST LINES WITH VARIATION ARROWS & TRIANGLES */}
+                  {render4CostLines(p)}
 
                   {p.clausulaCusto && (
                     <div className="text-[10px] text-slate-400 bg-slate-950/40 p-2 rounded-lg border border-slate-800/40 line-clamp-2" title={p.clausulaCusto}>
-                      💡 <strong>Cláusula:</strong> {p.clausulaCusto}
+                      💡 <strong>Cláusula Custo:</strong> {p.clausulaCusto}
                     </div>
                   )}
                 </div>
