@@ -102,6 +102,110 @@ export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: strin
   return { ym: `${fallbackYear}-01`, year: fallbackYear, month: 1 };
 }
 
+/**
+ * Dedicated Parser for INFORMAÇÕES_PROJETOS.xlsx
+ */
+export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract[] {
+  const prazoSheetName = workbook.SheetNames.find((s) => s.toLowerCase().includes('prazo')) || workbook.SheetNames[0];
+  const custoSheetName = workbook.SheetNames.find((s) => s.toLowerCase().includes('custo')) || workbook.SheetNames[1];
+
+  const prazoSheet = workbook.Sheets[prazoSheetName];
+  const custoSheet = workbook.Sheets[custoSheetName];
+
+  if (!prazoSheet && !custoSheet) return [];
+
+  const plazoRows: any[][] = prazoSheet ? XLSX.utils.sheet_to_json(prazoSheet, { header: 1, raw: false }) : [];
+  const custoRows: any[][] = custoSheet ? XLSX.utils.sheet_to_json(custoSheet, { header: 1, raw: false }) : [];
+
+  const projectsMap: Record<string, Partial<ProjectContract>> = {};
+
+  const formatExcelDateStr = (rawVal: any, defaultStr = '2024-01-01') => {
+    if (!rawVal) return defaultStr;
+    const parsed = parseExcelDateYM(rawVal);
+    return `${parsed.ym}-01`;
+  };
+
+  const parseNum = (val: any) => {
+    if (val === undefined || val === null || val === 'N/A') return 0;
+    const n = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.-]+/g, ''));
+    return isNaN(n) ? 0 : n;
+  };
+
+  // 1. Process Prazo Obras
+  for (let i = 1; i < plazoRows.length; i++) {
+    const r = plazoRows[i];
+    if (!r || !r[0]) continue;
+    const name = String(r[0]).trim();
+    if (name.toLowerCase() === 'obra' || name.toLowerCase().includes('total')) continue;
+
+    const startDate = formatExcelDateStr(r[1], '2023-01-01');
+    const baselineEnd = formatExcelDateStr(r[2], '2025-12-01');
+    const replannedEnd = formatExcelDateStr(r[4] || r[2], baselineEnd);
+    const actualEnd = r[5] ? formatExcelDateStr(r[5]) : undefined;
+
+    const initialMonths = parseNum(r[3]) || 24;
+    const realMonths = parseNum(r[10]) || initialMonths;
+
+    projectsMap[name] = {
+      id: `proj-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+      name,
+      type: 'Terceiros',
+      startDate,
+      baselineEndDate: baselineEnd,
+      replannedEndDate: replannedEnd,
+      actualEndDate: actualEnd,
+      initialMonths,
+      realMonths,
+      contractValue: parseNum(r[18]),
+      contractNotes: r[16] ? String(r[16]).trim() : undefined,
+      multaPercent: parseNum(r[17]),
+      valorMulta: parseNum(r[20]),
+      estimatedMonthlyTeamCost: 28000,
+    };
+  }
+
+  // 2. Process Custo Obras
+  for (let i = 1; i < custoRows.length; i++) {
+    const r = custoRows[i];
+    if (!r || !r[0]) continue;
+    const name = String(r[0]).trim();
+    if (name.toLowerCase() === 'obra' || name.toLowerCase().includes('total')) continue;
+
+    if (!projectsMap[name]) {
+      projectsMap[name] = {
+        id: `proj-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+        name,
+        startDate: '2023-01-01',
+        baselineEndDate: '2025-12-01',
+        replannedEndDate: '2025-12-01',
+        initialMonths: 24,
+        realMonths: 24,
+        estimatedMonthlyTeamCost: 28000,
+      };
+    }
+
+    const p = projectsMap[name];
+    const rawType = String(r[1] || '').toLowerCase();
+    p.type = rawType.includes('interna') ? 'Interna' : 'Terceiros';
+
+    p.orcamentoRasoReajustado = parseNum(r[2]);
+    p.projecaoRasoAtual = parseNum(r[3]);
+    p.resultadoRasoAtual = parseNum(r[4]);
+    p.orcamentoTotalReajustado = parseNum(r[5]);
+    p.projectedCostAtCompletion = parseNum(r[6]);
+    p.resultAtCompletion = parseNum(r[7]);
+    p.premioEconomia = parseNum(r[8]);
+    p.bandaPercent = parseNum(r[11]);
+    p.clausulaCusto = r[12] ? String(r[12]).trim() : undefined;
+
+    if (!p.contractValue || p.contractValue === 0) {
+      p.contractValue = p.orcamentoTotalReajustado || p.projectedCostAtCompletion || 10000000;
+    }
+  }
+
+  return Object.values(projectsMap) as ProjectContract[];
+}
+
 export function getSheetPreview(workbook: XLSX.WorkBook, sheetName: string, maxRows = 35): ParsedSheetPreview {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) {
@@ -137,15 +241,11 @@ export function getSheetPreview(workbook: XLSX.WorkBook, sheetName: string, maxR
   };
 }
 
-/**
- * Smart DRE Line Key Categorizer & Totalizer Detector
- */
 export function suggestDRELineKey(labelStr: string): DRELineKey | 'ignore' {
   if (!labelStr || typeof labelStr !== 'string') return 'ignore';
   const lower = labelStr.toLowerCase().trim();
   if (!lower) return 'ignore';
 
-  // Totalizers, Subtotals, Summaries -> IGNORE by default!
   if (
     lower.includes('total') ||
     lower.includes('subtotal') ||
@@ -161,7 +261,6 @@ export function suggestDRELineKey(labelStr: string): DRELineKey | 'ignore' {
     return 'ignore';
   }
 
-  // Exact / Smart Keyword Matching
   if (lower.includes('irpj') || lower.includes('csll') || lower.includes('imposto de renda')) return 'irpj_csll';
   if (lower.includes('permuta')) return 'permuta_taxa_adm';
   if (lower.includes('taxa de adm') || lower.includes('taxa adm') || lower.includes('receita adm')) return 'receita_taxa_adm';
@@ -380,7 +479,6 @@ export function processExcelImport(
     return 'realizado';
   };
 
-  // MODE A: Range of Columns (Horizontal Matrix Unpivoting)
   if (config.mapping.dateColMode === 'range' && config.mapping.startDateCol !== undefined && config.mapping.endDateCol !== undefined) {
     const startCol = parseInt(config.mapping.startDateCol, 10);
     const endCol = parseInt(config.mapping.endDateCol, 10);
@@ -461,7 +559,6 @@ export function processExcelImport(
     return transactions;
   }
 
-  // MODE B: Standard Single Column Mode
   const startIdx = Math.max(0, config.startRow - 1);
   const endIdx = config.endRow ? Math.min(rawData.length, config.endRow) : rawData.length;
   const dataRows = rawData.slice(startIdx, endIdx);

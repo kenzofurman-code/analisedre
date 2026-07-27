@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { getSheetPreview, parseExcelFileSheets, processExcelImport, extractUniqueDRELabels, ParsedSheetPreview } from '../utils/excelParser';
+import {
+  getSheetPreview,
+  parseExcelFileSheets,
+  processExcelImport,
+  extractUniqueDRELabels,
+  parseProjectsInfoSheet,
+  ParsedSheetPreview,
+} from '../utils/excelParser';
 import { DRELineKey, DRETransaction, ExcelImportConfig, ProjectContract, TransactionStatus } from '../types/dre';
 import { DRE_LINE_DEFINITIONS } from '../constants/dreStructure';
 import {
@@ -15,26 +22,41 @@ import {
   ListOrdered,
   SlidersHorizontal,
   XCircle,
+  Building2,
+  Calendar,
+  DollarSign,
+  Briefcase,
+  Layers,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+export type ImportCategoryMode = 'projects_register' | 'financial_transactions';
 export type SpreadsheetType = 'tabular' | 'horizontal_matrix';
 
 interface ImportTabProps {
   projects: ProjectContract[];
   onImportComplete: (newTransactions: DRETransaction[]) => void;
+  onImportProjects?: (newProjects: ProjectContract[]) => void;
 }
 
-export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete }) => {
+export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete, onImportProjects }) => {
+  const [importCategoryMode, setImportCategoryMode] = useState<ImportCategoryMode>('projects_register');
   const [step, setStep] = useState<number>(1);
-  const [spreadsheetType, setSpreadsheetType] = useState<SpreadsheetType>('tabular');
+
+  // Common file state
   const [fileName, setFileName] = useState<string>('');
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+
+  // Projects Register State
+  const [extractedProjects, setExtractedProjects] = useState<ProjectContract[]>([]);
+
+  // Financial Transactions State
+  const [spreadsheetType, setSpreadsheetType] = useState<SpreadsheetType>('tabular');
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   const [sheetPreview, setSheetPreview] = useState<ParsedSheetPreview | null>(null);
 
-  // Tabular Config State (Tipo 1)
+  // Tabular Config State
   const [startRow, setStartRow] = useState<number>(2);
   const [endRow, setEndRow] = useState<string>('');
   const [dateCol, setDateCol] = useState<string>('');
@@ -44,7 +66,7 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
   const [statusCol, setStatusCol] = useState<string>('');
   const [descriptionCol, setDescriptionCol] = useState<string>('');
 
-  // Horizontal Matrix Config State (Tipo 2)
+  // Horizontal Matrix Config State
   const [dateHeaderRow, setDateHeaderRow] = useState<number>(1);
   const [startDateCol, setStartDateCol] = useState<string>('');
   const [endDateCol, setEndDateCol] = useState<string>('');
@@ -61,7 +83,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
   const [importedPreviewData, setImportedPreviewData] = useState<DRETransaction[]>([]);
   const [autoForecastCount, setAutoForecastCount] = useState<number>(0);
 
-  // Helper for displaying dates as "Jan/24 (2024-01)"
   const formatDisplayDate = (ym: string) => {
     if (!ym || !ym.includes('-')) return ym;
     const [y, m] = ym.split('-');
@@ -73,7 +94,11 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
     return ym;
   };
 
-  // Handle file upload
+  const formatMoney = (val?: number) => {
+    if (val === undefined || val === null) return 'R$ 0,00';
+    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 });
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -85,19 +110,31 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
       const { sheetNames, workbook } = parseExcelFileSheets(buffer);
       setWorkbook(workbook);
       setSheetNames(sheetNames);
-      const firstSheet = sheetNames[0] || '';
-      setSelectedSheet(firstSheet);
 
-      if (firstSheet) {
-        const preview = getSheetPreview(workbook, firstSheet, 30);
-        setSheetPreview(preview);
+      if (importCategoryMode === 'projects_register') {
+        const parsedProjList = parseProjectsInfoSheet(workbook);
+        setExtractedProjects(parsedProjList);
+        setStep(2);
+      } else {
+        const firstSheet = sheetNames[0] || '';
+        setSelectedSheet(firstSheet);
+        if (firstSheet) {
+          const preview = getSheetPreview(workbook, firstSheet, 30);
+          setSheetPreview(preview);
+        }
+        setStep(2);
       }
-      setStep(2);
     };
     reader.readAsArrayBuffer(file);
   };
 
-  // Handle Sheet Change
+  const handleConfirmProjectsImport = () => {
+    if (onImportProjects) {
+      onImportProjects(extractedProjects);
+    }
+    setStep(5);
+  };
+
   const handleSheetChange = (sheetName: string) => {
     setSelectedSheet(sheetName);
     if (workbook) {
@@ -106,10 +143,8 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
     }
   };
 
-  // Step 2 -> Step 3: Extract unique labels and go to De-Para step
   const handleGoToDeParaStep = () => {
     if (!workbook || !selectedSheet) return;
-
     const parsedEndRow = endRow !== '' ? parseInt(endRow, 10) : undefined;
 
     const tempConfig: ExcelImportConfig = {
@@ -146,10 +181,8 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
     setStep(3);
   };
 
-  // Step 3 -> Step 4: Generate preview of processed transactions with De-Para mapping applied
   const handleGeneratePreview = () => {
     if (!workbook || !selectedSheet) return;
-
     const parsedEndRow = endRow !== '' ? parseInt(endRow, 10) : undefined;
 
     const config: ExcelImportConfig = {
@@ -196,6 +229,7 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
     setSheetNames([]);
     setSheetPreview(null);
     setImportedPreviewData([]);
+    setExtractedProjects([]);
     setUniqueDRELabels([]);
     setLineCategoryMapping({});
   };
@@ -206,35 +240,51 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Step Progress Bar */}
-      <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
+      {/* Step Progress & Mode Selector Header */}
+      <div className="glass-panel p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
           <div className="p-2.5 rounded-xl bg-blue-600/20 border border-blue-500/30 text-blue-400">
             <FileSpreadsheet className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-100">Assistente de Importação Múltipla de Planilhas</h3>
-            <p className="text-xs text-slate-400">Com De-Para Interativo de Linhas DRE e Filtro de Totalizadores</p>
+            <h3 className="text-base font-bold text-slate-100">Central de Importação Múltipla Excel</h3>
+            <p className="text-xs text-slate-400">Selecione se deseja importar o Cadastro de Projetos ou Lançamentos Financeiros DRE</p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          {[1, 2, 3, 4, 5].map((s) => (
-            <div key={s} className="flex items-center">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  step === s
-                    ? 'bg-blue-600 text-white ring-4 ring-blue-500/20'
-                    : step > s
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-800 text-slate-500'
-                }`}
-              >
-                {step > s ? '✓' : s}
-              </div>
-              {s < 5 && <div className={`w-6 h-0.5 ${step > s ? 'bg-emerald-600' : 'bg-slate-800'}`} />}
-            </div>
-          ))}
+        {/* Import Mode Tabs Selector */}
+        <div className="flex items-center space-x-1 bg-slate-900/80 border border-slate-700/60 rounded-xl p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setImportCategoryMode('projects_register');
+              handleReset();
+            }}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              importCategoryMode === 'projects_register'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span>1. Cadastro de Projetos (INFORMAÇÕES_PROJETOS)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setImportCategoryMode('financial_transactions');
+              handleReset();
+            }}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              importCategoryMode === 'financial_transactions'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>2. Lançamentos Financeiros DRE</span>
+          </button>
         </div>
       </div>
 
@@ -242,23 +292,165 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
       {step === 1 && (
         <div className="space-y-6">
           <div className="glass-panel p-8 rounded-2xl text-center border-2 border-dashed border-slate-700/80 hover:border-blue-500/50 transition-colors">
-            <div className="w-14 h-14 rounded-2xl bg-blue-600/10 text-blue-400 mx-auto flex items-center justify-center mb-3">
+            <div
+              className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center mb-3 ${
+                importCategoryMode === 'projects_register'
+                  ? 'bg-blue-600/10 text-blue-400'
+                  : 'bg-emerald-600/10 text-emerald-400'
+              }`}
+            >
               <FileUp className="w-7 h-7" />
             </div>
-            <h4 className="text-base font-bold text-slate-100 mb-1">Carregar Planilha Excel (.xlsx, .xls)</h4>
+            <h4 className="text-base font-bold text-slate-100 mb-1">
+              {importCategoryMode === 'projects_register'
+                ? 'Carregar Planilha de Projetos (INFORMAÇÕES_PROJETOS.xlsx)'
+                : 'Carregar Planilha de Lançamentos Financeiros (.xlsx, .xls)'}
+            </h4>
             <p className="text-xs text-slate-400 max-w-md mx-auto mb-5">
-              Selecione o arquivo de custos de MO, receitas de taxa ADM, contratos ou viabilidade.
+              {importCategoryMode === 'projects_register'
+                ? 'Extraia o cadastro inicial de todas as obras, prazos, contratos, orçamentos, bandas, multas e prêmios de economia.'
+                : 'Selecione o arquivo de custos de MO, receitas de taxa ADM, contratos ou viabilidade.'}
             </p>
-            <label className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs px-5 py-3 rounded-xl cursor-pointer shadow-lg shadow-blue-600/25 transition-all">
-              <span>Selecionar Arquivo Excel</span>
+            <label
+              className={`inline-flex items-center space-x-2 font-semibold text-xs px-5 py-3 rounded-xl cursor-pointer shadow-lg transition-all text-white ${
+                importCategoryMode === 'projects_register'
+                  ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/25'
+                  : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/25'
+              }`}
+            >
+              <span>
+                {importCategoryMode === 'projects_register'
+                  ? 'Selecionar INFORMAÇÕES_PROJETOS.xlsx'
+                  : 'Selecionar Planilha de Lançamentos DRE'}
+              </span>
               <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
             </label>
           </div>
         </div>
       )}
 
-      {/* STEP 2: Choose Spreadsheet Type & Configure Mapping */}
-      {step === 2 && sheetPreview && (
+      {/* MODE 1 STEP 2: Dedicated Layout for Project Register Import */}
+      {step === 2 && importCategoryMode === 'projects_register' && (
+        <div className="space-y-6">
+          <div className="glass-panel p-6 rounded-2xl space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30">
+                  <Building2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-100">
+                    Cadastro de Projetos Extraído: <span className="text-blue-400">{extractedProjects.length} Obras Encontradas</span>
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Planilha original: <strong>{fileName}</strong> (Abas: Prazo Obras & Custo Obras)
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleConfirmProjectsImport}
+                className="flex items-center space-x-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-emerald-600/25 transition-all"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Confirmar & Salvar Cadastro de Projetos</span>
+              </button>
+            </div>
+
+            {/* Grid of Extracted Projects Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[550px] overflow-y-auto pr-1">
+              {extractedProjects.map((p) => (
+                <div key={p.name} className="glass-panel p-4 rounded-xl border border-slate-800 space-y-3 hover:border-slate-700 transition-all">
+                  <div className="flex items-center justify-between">
+                    <h5 className="text-sm font-bold text-slate-100 flex items-center space-x-1.5">
+                      <Briefcase className="w-4 h-4 text-blue-400" />
+                      <span>{p.name}</span>
+                    </h5>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        p.type === 'Terceiros'
+                          ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
+                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                      }`}
+                    >
+                      {p.type}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/60">
+                    <div>
+                      <span className="text-slate-400 font-semibold block">Valor do Contrato:</span>
+                      <span className="text-emerald-400 font-mono font-bold">{formatMoney(p.contractValue)}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 font-semibold block">Prazo Obra (Meses):</span>
+                      <span className="text-slate-200 font-mono font-bold">{p.initialMonths} meses</span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 font-semibold block">Data Início (Base):</span>
+                      <span className="text-blue-300 font-mono">{p.startDate}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 font-semibold block">Término Replanejado:</span>
+                      <span className="text-amber-300 font-mono">{p.replannedEndDate}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Orçamento Raso Reajustado:</span>
+                      <span className="font-mono text-slate-300 font-semibold">{formatMoney(p.orcamentoRasoReajustado)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Projeção Custo Final (PMG):</span>
+                      <span className="font-mono text-rose-300 font-semibold">{formatMoney(p.projectedCostAtCompletion)}</span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-slate-800">
+                      <span className="font-bold text-slate-300">Resultado Projetado:</span>
+                      <span className={`font-mono font-bold ${(p.resultAtCompletion || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {formatMoney(p.resultAtCompletion)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {p.clausulaCusto && (
+                    <div className="text-[10px] text-slate-400 bg-slate-950/40 p-2 rounded-lg border border-slate-800/40 line-clamp-2" title={p.clausulaCusto}>
+                      💡 <strong>Cláusula:</strong> {p.clausulaCusto}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center pt-2">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="flex items-center space-x-1.5 px-4 py-2 bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold rounded-xl"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Voltar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmProjectsImport}
+                className="flex items-center space-x-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-emerald-600/25 transition-all"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Confirmar & Salvar no Banco de Dados</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODE 2 STEP 2: Configure Financial Mapping */}
+      {step === 2 && importCategoryMode === 'financial_transactions' && sheetPreview && (
         <div className="space-y-6">
           <div className="glass-panel p-6 rounded-2xl space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
@@ -269,7 +461,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
                 <p className="text-xs text-slate-400">Total de linhas: {sheetPreview.totalRows} | Colunas: {sheetPreview.totalCols}</p>
               </div>
 
-              {/* Sheet selector */}
               <div className="flex items-center space-x-2">
                 <span className="text-xs font-semibold text-slate-400">Aba da Planilha:</span>
                 <select
@@ -287,7 +478,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               </div>
             </div>
 
-            {/* SPREADSHEET TYPE SELECTOR CARDS */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-200 uppercase tracking-wider">
                 1. Selecione o Tipo/Formato da Planilha:
@@ -341,7 +531,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               </div>
             </div>
 
-            {/* FORM FOR TIPO 1: TABULAR LIST */}
             {spreadsheetType === 'tabular' && (
               <div className="space-y-4 pt-2 border-t border-slate-800">
                 <label className="text-xs font-bold text-slate-200 uppercase tracking-wider">
@@ -476,7 +665,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               </div>
             )}
 
-            {/* FORM FOR TIPO 2: HORIZONTAL MATRIX */}
             {spreadsheetType === 'horizontal_matrix' && (
               <div className="space-y-4 pt-2 border-t border-slate-800">
                 <div className="p-3 bg-indigo-950/30 border border-indigo-500/30 rounded-xl text-xs text-indigo-300">
@@ -605,7 +793,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               </div>
             )}
 
-            {/* Preview Sheet Table (30 VISIBLE ROWS) */}
             <div className="space-y-2">
               <p className="text-xs font-bold text-slate-300 flex items-center justify-between">
                 <span className="flex items-center space-x-2">
@@ -642,7 +829,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               </div>
             </div>
 
-            {/* Navigation to Step 3 */}
             <div className="flex justify-between items-center pt-2">
               <button
                 type="button"
@@ -692,7 +878,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
                 </div>
               </div>
 
-              {/* Quick Bulk Action Buttons */}
               <div className="flex items-center space-x-2">
                 <button
                   type="button"
@@ -700,7 +885,14 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
                     const newMap: Record<string, DRELineKey | 'ignore'> = {};
                     uniqueDRELabels.forEach((item) => {
                       const lower = item.label.toLowerCase();
-                      if (lower.includes('total') || lower.includes('subtotal') || lower.includes('saldo') || lower.includes('resultado') || lower.includes('margem') || lower.includes('lucro')) {
+                      if (
+                        lower.includes('total') ||
+                        lower.includes('subtotal') ||
+                        lower.includes('saldo') ||
+                        lower.includes('resultado') ||
+                        lower.includes('margem') ||
+                        lower.includes('lucro')
+                      ) {
                         newMap[item.label] = 'ignore';
                       } else {
                         newMap[item.label] = item.suggestedKey;
@@ -715,7 +907,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               </div>
             </div>
 
-            {/* De-Para Mapping Table */}
             <div className="overflow-x-auto border border-slate-800 rounded-xl max-h-[500px]">
               <table className="w-full text-xs text-left text-slate-300">
                 <thead className="bg-slate-900 text-slate-400 font-semibold sticky top-0 z-10 border-b border-slate-800">
@@ -792,7 +983,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               </table>
             </div>
 
-            {/* Navigation to Step 4 */}
             <div className="flex justify-between items-center pt-2">
               <button
                 type="button"
@@ -837,7 +1027,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               )}
             </div>
 
-            {/* Table of processed items */}
             <div className="overflow-x-auto border border-slate-800 rounded-xl max-h-96">
               <table className="w-full text-xs text-left text-slate-300">
                 <thead className="bg-slate-900 text-slate-400 font-semibold sticky top-0">
@@ -887,7 +1076,6 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               </table>
             </div>
 
-            {/* Actions */}
             <div className="flex justify-between items-center pt-2">
               <button
                 type="button"
@@ -917,9 +1105,15 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
           <div className="w-16 h-16 rounded-full bg-emerald-600/20 text-emerald-400 mx-auto flex items-center justify-center">
             <CheckCircle2 className="w-10 h-10" />
           </div>
-          <h4 className="text-xl font-bold text-slate-100">Importação Concluída com Sucesso!</h4>
+          <h4 className="text-xl font-bold text-slate-100">
+            {importCategoryMode === 'projects_register'
+              ? 'Cadastro de Projetos Atualizado com Sucesso!'
+              : 'Importação Concluída com Sucesso!'}
+          </h4>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Os lançamentos foram consolidados e já estão disponíveis no DRE no Tempo, Fluxo de Caixa e Dashboards.
+            {importCategoryMode === 'projects_register'
+              ? `${extractedProjects.length} projetos foram cadastrados e atualizados no banco de dados.`
+              : 'Os lançamentos foram consolidados e já estão disponíveis no DRE no Tempo, Fluxo de Caixa e Dashboards.'}
           </p>
           <div className="pt-4 flex justify-center space-x-3">
             <button
@@ -928,7 +1122,7 @@ export const ImportTab: React.FC<ImportTabProps> = ({ projects, onImportComplete
               className="flex items-center space-x-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl"
             >
               <RefreshCw className="w-4 h-4" />
-              <span>Importar Outra Planilha</span>
+              <span>Importar Outro Arquivo</span>
             </button>
           </div>
         </div>

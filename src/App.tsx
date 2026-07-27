@@ -81,6 +81,19 @@ export function App() {
     setActiveTab('query');
   };
 
+  const handleImportProjects = (newProjects: ProjectContract[]) => {
+    setProjects((prev) => {
+      const map = new Map<string, ProjectContract>();
+      prev.forEach((p) => map.set(p.name.toLowerCase(), p));
+      newProjects.forEach((np) => {
+        const existing = map.get(np.name.toLowerCase());
+        map.set(np.name.toLowerCase(), { ...existing, ...np } as ProjectContract);
+      });
+      return Array.from(map.values());
+    });
+    setActiveTab('dashboard');
+  };
+
   const handleDeleteTransaction = (id: string) => {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
   };
@@ -102,7 +115,6 @@ export function App() {
   // Compute monthly DRE data for timeline and cashflow
   const monthlyColumns = calculateMonthlyDRE(transactions, projects, settings, selectedProject, statusFilter);
 
-  // Tab Titles & Subtitles
   const tabTitles: Record<TabType, { title: string; subtitle: string }> = {
     timeline: {
       title: 'Demonstração do Resultado do Exercício no Tempo',
@@ -121,8 +133,8 @@ export function App() {
       subtitle: 'Matriz comparativa lado a lado da performance financeira de cada obra',
     },
     import: {
-      title: 'Importação Múltipla de Planilhas Excel',
-      subtitle: 'Assistente com classificação em Realizado, Projetado (Futuro) e Previsto Inicial',
+      title: 'Central de Importação Múltipla Excel',
+      subtitle: 'Assistente para Cadastro de Projetos (INFORMAÇÕES_PROJETOS) e Lançamentos DRE',
     },
     query: {
       title: 'Base de Dados & Lançamentos Importados',
@@ -168,7 +180,11 @@ export function App() {
           )}
 
           {activeTab === 'import' && (
-            <ImportTab projects={projects} onImportComplete={handleImportComplete} />
+            <ImportTab
+              projects={projects}
+              onImportComplete={handleImportComplete}
+              onImportProjects={handleImportProjects}
+            />
           )}
 
           {activeTab === 'query' && (

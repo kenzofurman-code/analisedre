@@ -69,6 +69,13 @@ export interface ProjectContract {
   contractNotes?: string;
   estimatedMonthlyTeamCost: number;
   m2Area?: number;
+  orcamentoRasoReajustado?: number;
+  projecaoRasoAtual?: number;
+  resultadoRasoAtual?: number;
+  orcamentoTotalReajustado?: number;
+  multaPercent?: number;
+  valorMulta?: number;
+  clausulaCusto?: string;
 }
 
 export type TeamCostMode = 'real' | 'estimado';
