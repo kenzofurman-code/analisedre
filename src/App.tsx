@@ -7,6 +7,7 @@ import { ViabilityDashboardTab } from './pages/ViabilityDashboardTab';
 import { ProjectComparisonTab } from './pages/ProjectComparisonTab';
 import { ImportTab } from './pages/ImportTab';
 import { DataQueryTab } from './pages/DataQueryTab';
+import { ProjectQueryTab } from './pages/ProjectQueryTab';
 import { DRETransaction, GlobalFinancialSettings, ProjectContract, SyncStatus } from './types/dre';
 import { INITIAL_PROJECTS, INITIAL_SETTINGS, generateInitialTransactions } from './services/initialData';
 import { calculateMonthlyDRE } from './services/dreCalculator';
@@ -91,7 +92,27 @@ export function App() {
       });
       return Array.from(map.values());
     });
-    setActiveTab('dashboard');
+    setActiveTab('projects');
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+  };
+
+  const handleClearAllProjects = () => {
+    if (window.confirm('Tem certeza que deseja limpar todo o cadastro de projetos?')) {
+      setProjects([]);
+    }
+  };
+
+  const handleResetProjects = () => {
+    if (window.confirm('Deseja restaurar o cadastro de projetos inicial?')) {
+      setProjects(INITIAL_PROJECTS);
+    }
+  };
+
+  const handleAddProject = (newProj: ProjectContract) => {
+    setProjects((prev) => [newProj, ...prev]);
   };
 
   const handleDeleteTransaction = (id: string) => {
@@ -136,16 +157,25 @@ export function App() {
       title: 'Central de Importação Múltipla Excel',
       subtitle: 'Assistente para Cadastro de Projetos (INFORMAÇÕES_PROJETOS) e Lançamentos DRE',
     },
+    projects: {
+      title: 'Cadastro & Base de Dados de Projetos',
+      subtitle: 'Consulta, busca, gestão e limpeza do cadastro de obras importado de INFORMAÇÕES_PROJETOS',
+    },
     query: {
-      title: 'Base de Dados & Lançamentos Importados',
-      subtitle: 'Consulta, busca, filtros e edição com rastreabilidade de valores originais',
+      title: 'Base de Lançamentos Financeiros DRE',
+      subtitle: 'Consulta, busca, filtros e edição de lançamentos com rastreabilidade de valores originais',
     },
   };
 
   return (
     <div className="flex min-h-screen bg-[#0B0F17] text-slate-100">
       {/* Sidebar Navigation */}
-      <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} totalTransactionsCount={transactions.length} />
+      <Sidebar
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        totalTransactionsCount={transactions.length}
+        totalProjectsCount={projects.length}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -184,6 +214,16 @@ export function App() {
               projects={projects}
               onImportComplete={handleImportComplete}
               onImportProjects={handleImportProjects}
+            />
+          )}
+
+          {activeTab === 'projects' && (
+            <ProjectQueryTab
+              projects={projects}
+              onDeleteProject={handleDeleteProject}
+              onClearAllProjects={handleClearAllProjects}
+              onAddProject={handleAddProject}
+              onResetProjects={handleResetProjects}
             />
           )}
 

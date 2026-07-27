@@ -8,17 +8,24 @@ import {
   Columns3,
   Building2,
   Sliders,
+  FolderGit2,
 } from 'lucide-react';
 
-export type TabType = 'import' | 'query' | 'timeline' | 'cashflow' | 'dashboard' | 'comparison';
+export type TabType = 'import' | 'query' | 'projects' | 'timeline' | 'cashflow' | 'dashboard' | 'comparison';
 
 interface SidebarProps {
   activeTab: TabType;
   onSelectTab: (tab: TabType) => void;
   totalTransactionsCount: number;
+  totalProjectsCount: number;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, totalTransactionsCount }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  onSelectTab,
+  totalTransactionsCount,
+  totalProjectsCount,
+}) => {
   const navItems = [
     {
       id: 'timeline' as TabType,
@@ -51,10 +58,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, totalT
       description: 'Assistente e mapeamento flexível',
     },
     {
+      id: 'projects' as TabType,
+      label: 'Cadastro de Projetos',
+      icon: FolderGit2,
+      description: 'Consulta & gestão de obras',
+      badge: totalProjectsCount,
+    },
+    {
       id: 'query' as TabType,
-      label: 'Consulta de Dados',
+      label: 'Lançamentos DRE',
       icon: Table,
-      description: 'Registros e log de importação',
+      description: 'Consulta da base financeira',
       badge: totalTransactionsCount,
     },
   ];
