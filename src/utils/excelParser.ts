@@ -21,11 +21,113 @@ export interface SpreadsheetPreset {
   status?: TransactionStatus;
   presetTitle?: string;
   presetDescription?: string;
+  isMultiSheetTaxaAdm?: boolean;
 }
 
 export function parseExcelFileSheets(fileBuffer: ArrayBuffer): { sheetNames: string[]; workbook: XLSX.WorkBook } {
   const workbook = XLSX.read(fileBuffer, { type: 'array', cellDates: true });
   return { sheetNames: workbook.SheetNames, workbook };
+}
+
+/**
+ * Robust Multilingual Universal Date Parser for Excel Cells
+ */
+export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: string; year: number; month: number } {
+  if (dateVal === undefined || dateVal === null || String(dateVal).trim() === '') {
+    return { ym: `${fallbackYear}-01`, year: fallbackYear, month: 1 };
+  }
+
+  // 1. Handle JS Date Objects (from cellDates: true)
+  if (typeof dateVal === 'object' && dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+    const y = dateVal.getUTCFullYear();
+    const m = dateVal.getUTCMonth() + 1;
+    const year = y < 2010 ? fallbackYear : y;
+    return { ym: `${year}-${String(m).padStart(2, '0')}`, year, month: m };
+  }
+
+  const str = String(dateVal).trim();
+
+  // 2. Handle Numeric Excel Serial Dates (e.g. 45170, 44805)
+  const numSerial = typeof dateVal === 'number' ? dateVal : parseFloat(str);
+  if (!isNaN(numSerial) && numSerial > 30000 && numSerial < 60000 && !str.includes('/') && !str.includes('-')) {
+    const utcDays = Math.floor(numSerial - 25569);
+    const utcValue = utcDays * 86400;
+    const dateObj = new Date(utcValue * 1000);
+    const y = dateObj.getUTCFullYear();
+    const m = dateObj.getUTCMonth() + 1;
+    const year = y < 2010 ? fallbackYear : y;
+    return { ym: `${year}-${String(m).padStart(2, '0')}`, year, month: m };
+  }
+
+  // 3. Handle ISO Dates (YYYY-MM-DD or YYYY-MM)
+  const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})/);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10);
+    const year = y < 2010 ? fallbackYear : y;
+    return { ym: `${year}-${String(m).padStart(2, '0')}`, year, month: m };
+  }
+
+  // 4. Multilingual Month Name Parsing (Portuguese, English, Spanish)
+  const monthNamesMap: Record<string, number> = {
+    jan: 1, january: 1, janeiro: 1, enero: 1,
+    fev: 2, feb: 2, february: 2, fevereiro: 2, febrero: 2,
+    mar: 3, march: 3, marco: 3, março: 3, marzo: 3,
+    abr: 4, apr: 4, april: 4, abril: 4,
+    mai: 5, may: 5, maio: 5, mayo: 5,
+    jun: 6, june: 6, junho: 6, junio: 6,
+    jul: 7, july: 7, julho: 7, julio: 7,
+    ago: 8, aug: 8, august: 8, agosto: 8,
+    set: 9, sep: 9, sept: 9, september: 9, setembro: 9, septiembre: 9,
+    out: 10, oct: 10, october: 10, outubro: 10, octubre: 10,
+    nov: 11, november: 11, novembro: 11, noviembre: 11,
+    dez: 12, dec: 12, december: 12, dezembro: 12, diciembre: 12,
+  };
+
+  const lowerStr = str.toLowerCase();
+  for (const [monthName, monthNum] of Object.entries(monthNamesMap)) {
+    if (lowerStr.includes(monthName)) {
+      const yearMatch = str.match(/\b(20\d{2}|\d{2})\b/);
+      let year = fallbackYear;
+      if (yearMatch) {
+        const parsedY = parseInt(yearMatch[1], 10);
+        year = yearMatch[1].length === 2 ? 2000 + parsedY : parsedY;
+        if (year < 2010) year = fallbackYear;
+      }
+      return { ym: `${year}-${String(monthNum).padStart(2, '0')}`, year, month: monthNum };
+    }
+  }
+
+  // 5. Handle Slash / Dash Dates (D/M/Y or M/D/Y)
+  const slashMatch = str.match(/^(\d{1,2})[/.-](\d{1,2})([/.-](\d{2,4}))?/);
+  if (slashMatch) {
+    const part1 = parseInt(slashMatch[1], 10);
+    const part2 = parseInt(slashMatch[2], 10);
+    const part4 = slashMatch[4];
+
+    if (part4) {
+      let year = parseInt(part4, 10);
+      if (part4.length === 2) year += 2000;
+      if (year < 2010) year = fallbackYear;
+
+      let month = part2;
+      // In Excel locale formats like M/D/YY (e.g. 3/1/26 = March 1, 2026), part1 is Month
+      if (part1 <= 12 && (part2 === 1 || part1 > part2)) {
+        month = part1;
+      } else if (part2 <= 12 && part1 > 12) {
+        month = part2;
+      }
+      return { ym: `${year}-${String(month).padStart(2, '0')}`, year, month };
+    } else {
+      let month = part1;
+      if (part1 <= 31 && part2 <= 12) {
+        month = part2;
+      }
+      return { ym: `${fallbackYear}-${String(month).padStart(2, '0')}`, year: fallbackYear, month };
+    }
+  }
+
+  return { ym: `${fallbackYear}-01`, year: fallbackYear, month: 1 };
 }
 
 /**
@@ -103,24 +205,27 @@ export function detectSpreadsheetPreset(workbook: XLSX.WorkBook): SpreadsheetPre
       };
     }
 
-    // Check RECEITAS TAXA ADM (Projeto | Tipologia | Valor Cobrado | Valor Previsto)
+    // Check RECEITAS TAXA ADM (Multi-sheet ou Banco de Dados)
     if (
-      (h0.includes('projeto') && (h0.includes('valor cobrado') || h0.includes('valor previsto'))) ||
-      sheetName.toLowerCase().includes('banco de dados')
+      sheetName.toLowerCase().includes('banco de dados') ||
+      sheetName.toLowerCase().includes('receitas taxa') ||
+      sheetNames.includes('Unna') ||
+      sheetNames.includes('Qoya') ||
+      sheetNames.includes('Pace')
     ) {
-      const h = h0;
       return {
         preset: 'RECEITAS_TAXA_ADM_BD',
         mode: 'financial_transactions',
         sheetName,
         startRow: 2,
-        projectCol: String(h.indexOf('projeto') !== -1 ? h.indexOf('projeto') : 0),
-        dateCol: String(h.indexOf('data') !== -1 ? h.indexOf('data') : 1),
-        dreLineCol: String(h.indexOf('tipologia') !== -1 ? h.indexOf('tipologia') : 1),
-        amountCol: String(h.indexOf('valor cobrado') !== -1 ? h.indexOf('valor cobrado') : 2),
+        projectCol: '0',
+        dateCol: '1',
+        dreLineCol: '1',
+        amountCol: '2',
         status: 'realizado',
-        presetTitle: 'Banco de Dados de Taxas de Administração',
-        presetDescription: 'Detecção Automática: Tabela consolidada de receitas de taxa ADM por obra.',
+        presetTitle: 'Banco de Dados de Taxas de Administração (Multi-Projetos)',
+        presetDescription: 'Detecção Automática: Consolidação por abas de obras com competência de cobrança de taxa ADM.',
+        isMultiSheetTaxaAdm: true,
       };
     }
   }
@@ -131,94 +236,6 @@ export function detectSpreadsheetPreset(workbook: XLSX.WorkBook): SpreadsheetPre
     presetTitle: 'Planilha Genérica Mapeável',
     presetDescription: 'Selecione o tipo de lista ou matriz horizontal para mapear as colunas.',
   };
-}
-
-/**
- * Universal Date Parser for Excel Cells
- */
-export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: string; year: number; month: number } {
-  if (dateVal === undefined || dateVal === null || String(dateVal).trim() === '') {
-    return { ym: `${fallbackYear}-01`, year: fallbackYear, month: 1 };
-  }
-
-  if (typeof dateVal === 'object' && dateVal instanceof Date && !isNaN(dateVal.getTime())) {
-    const y = dateVal.getUTCFullYear();
-    const m = dateVal.getUTCMonth() + 1;
-    const year = y < 2010 ? fallbackYear : y;
-    return { ym: `${year}-${String(m).padStart(2, '0')}`, year, month: m };
-  }
-
-  const str = String(dateVal).trim();
-  const numSerial = typeof dateVal === 'number' ? dateVal : parseFloat(str);
-  if (!isNaN(numSerial) && numSerial > 30000 && numSerial < 60000 && !str.includes('/') && !str.includes('-')) {
-    const utcDays = Math.floor(numSerial - 25569);
-    const utcValue = utcDays * 86400;
-    const dateObj = new Date(utcValue * 1000);
-    const y = dateObj.getUTCFullYear();
-    const m = dateObj.getUTCMonth() + 1;
-    const year = y < 2010 ? fallbackYear : y;
-    return { ym: `${year}-${String(m).padStart(2, '0')}`, year, month: m };
-  }
-
-  const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})/);
-  if (isoMatch) {
-    const y = parseInt(isoMatch[1], 10);
-    const m = parseInt(isoMatch[2], 10);
-    const year = y < 2010 ? fallbackYear : y;
-    return { ym: `${year}-${String(m).padStart(2, '0')}`, year, month: m };
-  }
-
-  const ptMonths: Record<string, number> = {
-    jan: 1, janeiro: 1,
-    fev: 2, fevereiro: 2,
-    mar: 3, marco: 3, março: 3,
-    abr: 4, abril: 4,
-    mai: 5, maio: 5,
-    jun: 6, junho: 6,
-    jul: 7, julho: 7,
-    ago: 8, agosto: 8,
-    set: 9, setembro: 9,
-    out: 10, outubro: 10,
-    nov: 11, novembro: 11,
-    dez: 12, dezembro: 12,
-  };
-
-  const lowerStr = str.toLowerCase();
-  for (const [monthName, monthNum] of Object.entries(ptMonths)) {
-    if (lowerStr.includes(monthName)) {
-      const yearMatch = str.match(/\b(20\d{2}|\d{2})\b/);
-      let year = fallbackYear;
-      if (yearMatch) {
-        const parsedY = parseInt(yearMatch[1], 10);
-        year = yearMatch[1].length === 2 ? 2000 + parsedY : parsedY;
-        if (year < 2010) year = fallbackYear;
-      }
-      return { ym: `${year}-${String(monthNum).padStart(2, '0')}`, year, month: monthNum };
-    }
-  }
-
-  const slashMatch = str.match(/^(\d{1,2})[/.-](\d{1,2})([/.-](\d{2,4}))?/);
-  if (slashMatch) {
-    const part1 = parseInt(slashMatch[1], 10);
-    const part2 = parseInt(slashMatch[2], 10);
-    const part4 = slashMatch[4];
-
-    if (part4) {
-      let year = parseInt(part4, 10);
-      if (part4.length === 2) year += 2000;
-      if (year < 2010) year = fallbackYear;
-      const month = part2;
-      return { ym: `${year}-${String(month).padStart(2, '0')}`, year, month };
-    } else {
-      let month = part1;
-      if (part1 <= 31 && part2 <= 12) {
-        month = part2;
-      }
-      return { ym: `${fallbackYear}-${String(month).padStart(2, '0')}`, year: fallbackYear, month };
-    }
-  }
-
-  return { ym: `${fallbackYear}-01`, year: fallbackYear, month: 1 };
 }
 
 /**
@@ -342,6 +359,69 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
   return Object.values(projectsMap) as ProjectContract[];
 }
 
+/**
+ * Dedicated Parser for Multi-Sheet RECEITAS TAXA ADM.xlsx
+ */
+export function parseMultiSheetReceitasTaxaAdm(
+  workbook: XLSX.WorkBook,
+  fileName: string = 'RECEITAS TAXA ADM.xlsx',
+  currentDateStr: string = new Date().toISOString().slice(0, 7)
+): DRETransaction[] {
+  const transactions: DRETransaction[] = [];
+  const excludedSheets = ['incc - di', 'incc - m', 'banco de dados', 'resumo consolidado', 'leia-me'];
+
+  workbook.SheetNames.forEach((sheetName) => {
+    if (excludedSheets.includes(sheetName.toLowerCase().trim())) return;
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return;
+
+    const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+    if (rawData.length < 2) return;
+
+    const projectName = sheetName.trim();
+
+    for (let rIdx = 2; rIdx < rawData.length; rIdx++) {
+      const row = rawData[rIdx];
+      if (!row || row.length === 0) continue;
+
+      const dateCell = row[0];
+      const amountCell = row[3] || row[2] || row[4];
+
+      if (!dateCell || !amountCell) continue;
+
+      const parsedAmount = Math.abs(parseFloat(String(amountCell).replace(/[^0-9.-]+/g, '')) || 0);
+      if (parsedAmount > 0) {
+        const parsedDate = parseExcelDateYM(dateCell, 2024);
+        const formattedDate = parsedDate.ym;
+
+        let finalStatus: TransactionStatus = 'realizado';
+        let isAutoForecast = false;
+
+        if (formattedDate > currentDateStr) {
+          finalStatus = 'projetado';
+          isAutoForecast = true;
+        }
+
+        transactions.push({
+          id: `taxa-${projectName}-${formattedDate}-${rIdx}`,
+          project: projectName,
+          date: formattedDate,
+          dreLineKey: 'receita_taxa_adm',
+          amount: parsedAmount,
+          status: finalStatus,
+          isAutoForecast,
+          description: `Receita Taxa de Adm (${projectName})`,
+          sourceFile: fileName,
+          sourceSheet: sheetName,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+  });
+
+  return transactions;
+}
+
 export function getSheetPreview(workbook: XLSX.WorkBook, sheetName: string, maxRows = 35): ParsedSheetPreview {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) {
@@ -452,132 +532,21 @@ export function extractUniqueDRELabels(
   return result;
 }
 
-export function parseViabilidadeMatrixSheet(
-  workbook: XLSX.WorkBook,
-  sheetName: string,
-  fileName: string = 'DRE PREVISTO PROJETO GRANDLODGE.xlsx',
-  currentDateStr: string = new Date().toISOString().slice(0, 7)
-): { transactions: DRETransaction[]; projectInfo?: Partial<ProjectContract> } {
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) return { transactions: [] };
-
-  const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
-  if (rawData.length < 35) return { transactions: [] };
-
-  let projectName = 'GRAND LODGE';
-  let contractVal = 46239533.55;
-  let durationMonths = 27;
-  let startDateStr = '2026-05-11';
-
-  rawData.forEach((row) => {
-    if (!row || row.length < 2) return;
-    const label = String(row[1] || '').trim();
-    const val = row[2];
-
-    if (label.includes('OBRA:')) {
-      projectName = String(row[2] || row[3] || 'GRAND LODGE').trim();
-    } else if (label.includes('R$ Raso de Obra')) {
-      contractVal = parseFloat(String(val).replace(/[^0-9.-]+/g, '')) || contractVal;
-    } else if (label.includes('Prazo Obra')) {
-      durationMonths = parseInt(String(val)) || durationMonths;
-    } else if (label.includes('Data início Obra')) {
-      startDateStr = String(val).slice(0, 10);
-    }
-  });
-
-  const monthRowIdx = 33;
-  const monthCols: { colIdx: number; dateYM: string }[] = [];
-
-  if (rawData[monthRowIdx]) {
-    let currentYear = 2026;
-    let prevMonth = 0;
-
-    rawData[monthRowIdx].forEach((cellVal, colIdx) => {
-      if (colIdx >= 4 && cellVal) {
-        const parsed = parseExcelDateYM(cellVal, currentYear);
-        if (parsed.month < prevMonth) {
-          currentYear += 1;
-        }
-        prevMonth = parsed.month;
-        const ym = `${currentYear}-${String(parsed.month).padStart(2, '0')}`;
-        monthCols.push({ colIdx, dateYM: ym });
-      }
-    });
-  }
-
-  const transactions: DRETransaction[] = [];
-  const lineMap: { labelMatch: string; key: DRELineKey }[] = [
-    { labelMatch: 'Receita Taxa de Adm', key: 'receita_taxa_adm' },
-    { labelMatch: 'Permuta Taxa de Adm', key: 'permuta_taxa_adm' },
-    { labelMatch: 'Receita MO Adm', key: 'receita_mo_adm' },
-    { labelMatch: 'Receita Assistência', key: 'receita_assistencia' },
-    { labelMatch: 'Impostos', key: 'impostos' },
-    { labelMatch: 'Despesa Assistência', key: 'despesa_assistencia' },
-    { labelMatch: 'Custos Equipe', key: 'custos_equipe' },
-    { labelMatch: 'Custos Deslocamento', key: 'custos_deslocamento' },
-    { labelMatch: 'Despesas Adm Pie', key: 'despesas_adm_pie' },
-  ];
-
-  for (let r = 34; r < Math.min(60, rawData.length); r++) {
-    const row = rawData[r];
-    if (!row) continue;
-    const lineLabel = String(row[1] || row[0] || '').trim();
-
-    const matched = lineMap.find((item) => lineLabel.toLowerCase().includes(item.labelMatch.toLowerCase()));
-    if (matched) {
-      monthCols.forEach(({ colIdx, dateYM }) => {
-        const val = row[colIdx];
-        if (val !== undefined && val !== null) {
-          const numVal = Math.abs(parseFloat(String(val).replace(/[^0-9.-]+/g, '')) || 0);
-          if (numVal > 0) {
-            let status: TransactionStatus = 'previsto_inicial';
-            let isAutoForecast = false;
-
-            transactions.push({
-              id: `mat-${projectName}-${matched.key}-${dateYM}-${colIdx}`,
-              project: projectName,
-              date: dateYM,
-              dreLineKey: matched.key,
-              amount: numVal,
-              status,
-              isAutoForecast,
-              description: `Matriz Viabilidade Base - ${matched.labelMatch}`,
-              sourceFile: fileName,
-              sourceSheet: sheetName,
-              createdAt: new Date().toISOString(),
-            });
-          }
-        }
-      });
-    }
-  }
-
-  return {
-    transactions,
-    projectInfo: {
-      name: projectName,
-      contractValue: contractVal,
-      initialMonths: durationMonths,
-      startDate: startDateStr,
-    },
-  };
-}
-
 export function processExcelImport(
   workbook: XLSX.WorkBook,
   config: ExcelImportConfig,
   currentDateStr: string = new Date().toISOString().slice(0, 7)
 ): DRETransaction[] {
+  // Check if RECEITAS TAXA ADM multi-sheet file
+  const isMultiSheetTaxaAdm = workbook.SheetNames.includes('Unna') && workbook.SheetNames.includes('Qoya') && workbook.SheetNames.includes('Pace');
+  if (isMultiSheetTaxaAdm) {
+    return parseMultiSheetReceitasTaxaAdm(workbook, config.fileName, currentDateStr);
+  }
+
   const sheet = workbook.Sheets[config.sheetName];
   if (!sheet) return [];
 
   const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
-  const isAutoMatrixViabilidade = rawData.some((r) => r && r[1] && String(r[1]).includes('R$ Raso de Obra'));
-
-  if (isAutoMatrixViabilidade) {
-    const res = parseViabilidadeMatrixSheet(workbook, config.sheetName, config.fileName, currentDateStr);
-    return res.transactions;
-  }
 
   const transactions: DRETransaction[] = [];
 
