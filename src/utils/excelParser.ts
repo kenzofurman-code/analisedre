@@ -111,7 +111,6 @@ export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: strin
       if (year < 2010) year = fallbackYear;
 
       let month = part2;
-      // In Excel locale formats like M/D/YY (e.g. 3/1/26 = March 1, 2026), part1 is Month
       if (part1 <= 12 && (part2 === 1 || part1 > part2)) {
         month = part1;
       } else if (part2 <= 12 && part1 > 12) {
@@ -348,6 +347,7 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
     p.projectedCostAtCompletion = parseNum(r[6]);
     p.resultAtCompletion = parseNum(r[7]);
     p.premioEconomia = parseNum(r[8]);
+    p.estouroContratada = parseNum(r[9]);
     p.bandaPercent = parseNum(r[11]);
     p.clausulaCusto = r[12] ? String(r[12]).trim() : undefined;
 
@@ -357,6 +357,48 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
   }
 
   return Object.values(projectsMap) as ProjectContract[];
+}
+
+/**
+ * Generate Estouro Contratada Transactions for Last Month of Projects
+ */
+export function generateEstouroTransactions(
+  projects: ProjectContract[],
+  currentDateStr: string = new Date().toISOString().slice(0, 7)
+): DRETransaction[] {
+  const transactions: DRETransaction[] = [];
+
+  projects.forEach((p) => {
+    if (p.estouroContratada && Math.abs(p.estouroContratada) > 0) {
+      const endRaw = p.actualEndDate || p.replannedEndDate || p.baselineEndDate || '2025-12-01';
+      const parsed = parseExcelDateYM(endRaw);
+      const lastMonthStr = parsed.ym;
+
+      let finalStatus: TransactionStatus = 'realizado';
+      let isAutoForecast = false;
+
+      if (lastMonthStr > currentDateStr) {
+        finalStatus = 'projetado';
+        isAutoForecast = true;
+      }
+
+      transactions.push({
+        id: `estouro-${p.id || p.name.toLowerCase()}-${lastMonthStr}`,
+        project: p.name,
+        date: lastMonthStr,
+        dreLineKey: 'estouro_contratada',
+        amount: Math.abs(p.estouroContratada),
+        status: finalStatus,
+        isAutoForecast,
+        description: `Estouro de Custo Suportado pela Contratada no Término (${p.name})`,
+        sourceFile: 'INFORMAÇÕES_PROJETOS.xlsx',
+        sourceSheet: 'Custo Obras',
+        createdAt: new Date().toISOString(),
+      });
+    }
+  });
+
+  return transactions;
 }
 
 /**
@@ -477,6 +519,7 @@ export function suggestDRELineKey(labelStr: string): DRELineKey | 'ignore' {
     return 'ignore';
   }
 
+  if (lower.includes('estouro') && lower.includes('contratada')) return 'estouro_contratada';
   if (lower.includes('irpj') || lower.includes('csll') || lower.includes('imposto de renda')) return 'irpj_csll';
   if (lower.includes('permuta')) return 'permuta_taxa_adm';
   if (lower.includes('taxa de adm') || lower.includes('taxa adm') || lower.includes('receita adm') || lower.includes('receitas adm')) return 'receita_taxa_adm';

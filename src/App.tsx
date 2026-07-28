@@ -12,8 +12,9 @@ import { DRETransaction, GlobalFinancialSettings, ProjectContract, SyncStatus } 
 import { INITIAL_PROJECTS, INITIAL_SETTINGS, generateInitialTransactions } from './services/initialData';
 import { calculateMonthlyDRE } from './services/dreCalculator';
 import { storageService, isFirebaseConfigured } from './services/firebaseConfig';
+import { generateEstouroTransactions } from './utils/excelParser';
 
-const DATA_VERSION = 'v3.0_financial_status_nomenclatures';
+const DATA_VERSION = 'v4.0_estouro_contratada_line';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
@@ -41,8 +42,10 @@ export function App() {
 
     localStorage.setItem('dre_data_version', DATA_VERSION);
     const initial = generateInitialTransactions();
-    localStorage.setItem('dre_transactions', JSON.stringify(initial));
-    return initial;
+    const initialEstouro = generateEstouroTransactions(INITIAL_PROJECTS);
+    const merged = [...initialEstouro, ...initial];
+    localStorage.setItem('dre_transactions', JSON.stringify(merged));
+    return merged;
   });
 
   // Save & Sync Data
@@ -90,7 +93,18 @@ export function App() {
         const existing = map.get(np.name.toLowerCase());
         map.set(np.name.toLowerCase(), { ...existing, ...np } as ProjectContract);
       });
-      return Array.from(map.values());
+      const updatedList = Array.from(map.values());
+
+      // Auto Generate Estouro Transactions for projects with estouroContratada
+      const estouroTxs = generateEstouroTransactions(updatedList);
+      if (estouroTxs.length > 0) {
+        setTransactions((prevTxs) => {
+          const filteredTxs = prevTxs.filter((t) => t.dreLineKey !== 'estouro_contratada');
+          return [...estouroTxs, ...filteredTxs];
+        });
+      }
+
+      return updatedList;
     });
     setActiveTab('projects');
   };
@@ -108,11 +122,26 @@ export function App() {
   const handleResetProjects = () => {
     if (window.confirm('Deseja restaurar o cadastro de projetos inicial?')) {
       setProjects(INITIAL_PROJECTS);
+      const estouroTxs = generateEstouroTransactions(INITIAL_PROJECTS);
+      setTransactions((prevTxs) => {
+        const filteredTxs = prevTxs.filter((t) => t.dreLineKey !== 'estouro_contratada');
+        return [...estouroTxs, ...filteredTxs];
+      });
     }
   };
 
   const handleAddProject = (newProj: ProjectContract) => {
-    setProjects((prev) => [newProj, ...prev]);
+    setProjects((prev) => {
+      const updated = [newProj, ...prev];
+      if (newProj.estouroContratada && Math.abs(newProj.estouroContratada) > 0) {
+        const estouroTxs = generateEstouroTransactions(updated);
+        setTransactions((prevTxs) => {
+          const filteredTxs = prevTxs.filter((t) => t.dreLineKey !== 'estouro_contratada');
+          return [...estouroTxs, ...filteredTxs];
+        });
+      }
+      return updated;
+    });
   };
 
   const handleDeleteTransaction = (id: string) => {

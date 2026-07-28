@@ -35,6 +35,7 @@ export const CashFlowTab: React.FC<CashFlowTabProps> = ({ monthlyColumns, select
       const totalOutflow =
         col.values.custos_equipe +
         col.values.custos_deslocamento +
+        col.values.estouro_contratada +
         col.values.impostos +
         col.values.despesa_assistencia +
         col.values.despesas_adm_pie;
@@ -64,6 +65,7 @@ export const CashFlowTab: React.FC<CashFlowTabProps> = ({ monthlyColumns, select
         col.values.despesa_assistencia +
         col.values.custos_equipe +
         col.values.custos_deslocamento +
+        col.values.estouro_contratada +
         col.values.despesas_adm_pie +
         col.values.irpj_csll;
 

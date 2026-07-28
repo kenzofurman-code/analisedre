@@ -110,6 +110,7 @@ export function calculateMonthlyDRE(
       despesa_assistencia: 0,
       custos_equipe: 0,
       custos_deslocamento: 0,
+      estouro_contratada: 0,
       margem_bruta_val: 0,
       margem_bruta_pct: 0,
       despesas_adm_pie: 0,
@@ -148,7 +149,6 @@ export function calculateMonthlyDRE(
       values.receita_taxa_adm + values.permuta_taxa_adm + values.receita_mo_adm + values.receita_assistencia;
 
     // FALLBACK FORMULA 1: Impostos sobre Faturamento (PIS + COFINS + ISS)
-    // If no explicit imported transaction for impostos exists (or 0), calculate using taxRatePercent
     if (values.impostos === 0 && grossRevenue > 0) {
       values.impostos = grossRevenue * (settings.taxRatePercent / 100);
     }
@@ -175,15 +175,18 @@ export function calculateMonthlyDRE(
     }
 
     const totalDirectExpensesCosts =
-      values.impostos + values.despesa_assistencia + values.custos_equipe + values.custos_deslocamento;
+      values.impostos +
+      values.despesa_assistencia +
+      values.custos_equipe +
+      values.custos_deslocamento +
+      values.estouro_contratada;
 
     values.margem_bruta_val = grossRevenue - totalDirectExpensesCosts;
     values.margem_bruta_pct = grossRevenue > 0 ? (values.margem_bruta_val / grossRevenue) * 100 : 0;
 
     values.resultado = values.margem_bruta_val - values.despesas_adm_pie;
 
-    // FALLBACK FORMULA 2: IRPJ + CSLL (Imposto de Renda e Contribuição Social)
-    // If no explicit imported transaction for irpj_csll exists (or 0) and resultado > 0, calculate using irpjCsllPercent
+    // FALLBACK FORMULA 2: IRPJ + CSLL
     if (values.irpj_csll === 0 && values.resultado > 0) {
       values.irpj_csll = values.resultado * (settings.irpjCsllPercent / 100);
     }

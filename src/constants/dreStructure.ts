@@ -58,13 +58,20 @@ export const DRE_LINE_DEFINITIONS: DRELineDefinition[] = [
     formulaInfo: 'Despesas com logística, viagens e deslocamento de engenharia',
   },
   {
+    key: 'estouro_contratada',
+    label: 'Estouro Suportado Contratada',
+    category: 'CUSTO',
+    sourceOriginInfo: 'Planilha: INFORMAÇÕES_PROJETOS.xlsx (Aba Custo Obras)',
+    formulaInfo: 'Lançamento de estouro de custo assumido pela Contratada no último mês do projeto',
+  },
+  {
     key: 'margem_bruta_val',
     label: 'MARGEM BRUTA R$',
     category: 'CALCULATED',
     isSubtotal: true,
     isCalculated: true,
     sourceOriginInfo: 'Linha de Subtotal Calculada',
-    formulaInfo: 'Fórmula: Receita Bruta Total - (Impostos + Despesa Assistência + Custos Equipe + Custos Deslocamento)',
+    formulaInfo: 'Fórmula: Receita Bruta Total - (Impostos + Despesa Assistência + Custos Equipe + Custos Deslocamento + Estouro Contratada)',
   },
   {
     key: 'margem_bruta_pct',

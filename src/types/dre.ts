@@ -9,6 +9,7 @@ export type DRELineKey =
   | 'despesa_assistencia'
   | 'custos_equipe'
   | 'custos_deslocamento'
+  | 'estouro_contratada'
   | 'margem_bruta_val'
   | 'margem_bruta_pct'
   | 'despesas_adm_pie'
@@ -77,16 +78,19 @@ export interface ProjectContract {
   valorMulta?: number;
   clausulaCusto?: string;
 
+  // Estouro contratada
+  estouroContratada?: number;
+
   // Rich Prazo Obras columns
-  mesInicial?: number; // Col D
-  mesCvco?: number; // Col E
-  mesEntregaUnidades?: number; // Col G
-  diasAtraso?: number; // Col I
-  custoEquipeMensal?: number; // Col J
-  prazoOrcamentoStr?: string; // Col K
-  custoOrcamentoEquipe?: number; // Col L
-  pagamentoMultaVal?: number; // Col N
-  riscoMultaVal?: number; // Col R
+  mesInicial?: number;
+  mesCvco?: number;
+  mesEntregaUnidades?: number;
+  diasAtraso?: number;
+  custoEquipeMensal?: number;
+  prazoOrcamentoStr?: string;
+  custoOrcamentoEquipe?: number;
+  pagamentoMultaVal?: number;
+  riscoMultaVal?: number;
 }
 
 export type TeamCostMode = 'real' | 'estimado';

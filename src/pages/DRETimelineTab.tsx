@@ -33,7 +33,7 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
         col.values.permuta_taxa_adm +
         col.values.receita_mo_adm +
         col.values.receita_assistencia;
-      const costs = col.values.custos_equipe + col.values.custos_deslocamento;
+      const costs = col.values.custos_equipe + col.values.custos_deslocamento + col.values.estouro_contratada;
       return grossRev > 0 || costs > 0;
     });
 
@@ -82,6 +82,7 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
               despesa_assistencia: 0,
               custos_equipe: 0,
               custos_deslocamento: 0,
+              estouro_contratada: 0,
               margem_bruta_val: 0,
               margem_bruta_pct: 0,
               despesas_adm_pie: 0,
