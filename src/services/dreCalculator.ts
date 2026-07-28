@@ -5,14 +5,15 @@ import {
   MonthlyDREColumn,
   ProjectContract,
 } from '../types/dre';
+import { parseExcelDateYM } from '../utils/excelParser';
 
 export function getProjectTimelineMonths(p: ProjectContract): { startYM: string; endYM: string } {
   if (!p.startDate) return { startYM: '2023-01', endYM: '2025-12' };
 
-  const startYM = p.startDate.slice(0, 7);
-  const [yStr, mStr] = startYM.split('-');
-  let y = parseInt(yStr, 10) || 2024;
-  let m = parseInt(mStr, 10) || 1;
+  const parsed = parseExcelDateYM(p.startDate, 2024);
+  const startYM = parsed.ym;
+  let y = parsed.year;
+  let m = parsed.month;
 
   const numMonths = p.realMonths || p.initialMonths || 24;
 
@@ -192,7 +193,7 @@ export function calculateMonthlyDRE(
       }
     });
 
-    // Team Cost Calculation for active selected projects strictly within project timeline
+    // Team Cost Calculation for active selected projects strictly within project timeline (startYM to endYM)
     let computedTeamCostMonth = 0;
 
     activeProjectsList.forEach((p) => {

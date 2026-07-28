@@ -100,14 +100,19 @@ export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: strin
     }
 
     let month = 1;
-    if (p2 === 1 && p1 <= 12) {
+    if (p1 <= 12 && p2 > 12) {
+      // US format M/D/YYYY (e.g. 9/18/2023)
       month = p1;
     } else if (p1 > 12 && p2 <= 12) {
+      // BR format DD/MM/YYYY (e.g. 18/09/2023)
       month = p2;
-    } else if (p2 <= 12) {
-      month = p2;
-    } else if (p1 <= 12) {
-      month = p1;
+    } else if (p1 <= 12 && p2 <= 12) {
+      // Ambiguous e.g. 9/1/23 (September 1st in US Excel M/D/YY format) vs 01/09/2023 (1st of Sept in BR)
+      if (p2 === 1 && p1 > 1) {
+        month = p1;
+      } else {
+        month = p2;
+      }
     }
 
     return { ym: `${year}-${String(month).padStart(2, '0')}`, year, month };
