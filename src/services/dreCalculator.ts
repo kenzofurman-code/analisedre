@@ -14,10 +14,14 @@ export function calculateMonthlyDRE(
   statusFilter: 'all' | 'realizado' | 'projetado' | 'previsto_inicial' = 'all'
 ): MonthlyDREColumn[] {
   const isGlobal = selectedProjects.includes('all') || selectedProjects.length === 0;
+  const selectedProjectsLower = selectedProjects.map((p) => p.toLowerCase().trim());
 
-  // 1. Filter transactions by selected projects array and status
+  // 1. Filter transactions by selected projects array (case-insensitive) and status
   const filtered = transactions.filter((t) => {
-    if (!isGlobal && !selectedProjects.includes(t.project)) return false;
+    if (!isGlobal && t.project) {
+      const tProjLower = t.project.toLowerCase().trim();
+      if (!selectedProjectsLower.includes(tProjLower)) return false;
+    }
 
     if (statusFilter === 'all') {
       if (t.status === 'previsto_inicial') return false; // Viabilidade base is separate
@@ -35,7 +39,7 @@ export function calculateMonthlyDRE(
 
   const activeProjectsList = isGlobal
     ? projects
-    : projects.filter((p) => selectedProjects.includes(p.name));
+    : projects.filter((p) => selectedProjectsLower.includes(p.name.toLowerCase().trim()));
 
   activeProjectsList.forEach((p) => {
     if (p.startDate) {
@@ -64,7 +68,7 @@ export function calculateMonthlyDRE(
 
   const currentDateStr = new Date().toISOString().slice(0, 7);
 
-  // 3. Pre-calculate Global Monthly Revenue for ADM Rateio
+  // 3. Pre-calculate Global Monthly Revenue for ADM Rateio (Case-insensitive project lookup)
   const globalMonthlyRevenue: Record<string, number> = {};
   const globalProjectRevenue: Record<string, Record<string, number>> = {};
   const globalActiveProjectsInMonth: Record<string, Set<string>> = {};
@@ -84,11 +88,18 @@ export function calculateMonthlyDRE(
         t.dreLineKey === 'receita_assistencia'
       ) {
         globalMonthlyRevenue[t.date] += t.amount;
-        if (!globalProjectRevenue[t.date][t.project]) {
-          globalProjectRevenue[t.date][t.project] = 0;
+
+        // Match canonical project name from projects list
+        const matchedProject = projects.find(
+          (p) => p.name.toLowerCase().trim() === t.project.toLowerCase().trim()
+        );
+        const projKey = matchedProject ? matchedProject.name : t.project.trim();
+
+        if (!globalProjectRevenue[t.date][projKey]) {
+          globalProjectRevenue[t.date][projKey] = 0;
         }
-        globalProjectRevenue[t.date][t.project] += t.amount;
-        globalActiveProjectsInMonth[t.date].add(t.project);
+        globalProjectRevenue[t.date][projKey] += t.amount;
+        globalActiveProjectsInMonth[t.date].add(projKey);
       }
     }
   });
@@ -151,10 +162,11 @@ export function calculateMonthlyDRE(
           computedTeamCostMonth += estimatedCost;
         }
       } else {
-        // Mode 2: Real Team Cost with Fallback to Estimated
+        // Mode 2: Real Team Cost with Fallback to Estimated (Case-insensitive project matching)
         const realTxForProjMonth = transactions.filter(
           (t) =>
-            t.project.toLowerCase() === p.name.toLowerCase() &&
+            t.project &&
+            t.project.toLowerCase().trim() === p.name.toLowerCase().trim() &&
             t.date === ym &&
             t.dreLineKey === 'custos_equipe' &&
             !t.id.startsWith('est-team-') &&
