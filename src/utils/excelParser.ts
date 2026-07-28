@@ -555,38 +555,39 @@ export function generateEstimatedTeamCostTransactions(
 
   projects.forEach((p) => {
     const custoMensal = p.custoEquipeMensal || p.estimatedMonthlyTeamCost || 0;
-    const mesD = p.mesInicial || 0;
+    if (custoMensal <= 0 || !p.startDate) return;
+
+    const parsed = parseExcelDateYM(p.startDate, 2023);
+
+    const mesD = p.mesInicial || p.initialMonths || 0;
     const mesE = p.mesCvco || 0;
     const mesG = p.mesEntregaUnidades || 0;
     const maxMonths = Math.max(mesD, mesE, mesG) || p.realMonths || p.initialMonths || 24;
 
-    if (custoMensal > 0 && p.startDate) {
-      const startParsed = parseExcelDateYM(p.startDate, 2023);
-      let [y, m] = [startParsed.year, startParsed.month];
+    let [y, m] = [parsed.year, parsed.month];
 
-      for (let step = 0; step < maxMonths; step++) {
-        const ym = `${y}-${String(m).padStart(2, '0')}`;
-        const isFuture = ym > currentDateStr;
+    for (let step = 0; step < maxMonths; step++) {
+      const ym = `${y}-${String(m).padStart(2, '0')}`;
+      const isFuture = ym > currentDateStr;
 
-        transactions.push({
-          id: `est-team-${p.id || p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${ym}`,
-          project: p.name,
-          date: ym,
-          dreLineKey: 'custos_equipe',
-          amount: custoMensal,
-          status: isFuture ? 'projetado' : 'realizado',
-          isAutoForecast: isFuture,
-          description: `Custo Estimado Mensal de Equipe (Cronograma ${p.name})`,
-          sourceFile: 'INFORMAÇÕES_PROJETOS.xlsx',
-          sourceSheet: 'Prazo Obras',
-          createdAt: new Date().toISOString(),
-        });
+      transactions.push({
+        id: `est-team-${p.id || p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${ym}`,
+        project: p.name,
+        date: ym,
+        dreLineKey: 'custos_equipe',
+        amount: custoMensal,
+        status: isFuture ? 'projetado' : 'realizado',
+        isAutoForecast: isFuture,
+        description: `Custo Estimado Mensal de Equipe (Cronograma ${p.name})`,
+        sourceFile: 'INFORMAÇÕES_PROJETOS.xlsx',
+        sourceSheet: 'Prazo Obras',
+        createdAt: new Date().toISOString(),
+      });
 
-        m++;
-        if (m > 12) {
-          m = 1;
-          y++;
-        }
+      m++;
+      if (m > 12) {
+        m = 1;
+        y++;
       }
     }
   });

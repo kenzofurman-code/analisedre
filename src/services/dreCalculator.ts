@@ -7,25 +7,28 @@ import {
 } from '../types/dre';
 import { parseExcelDateYM } from '../utils/excelParser';
 
-export function getProjectTimelineMonths(p: ProjectContract): { startYM: string; endYM: string } {
-  if (!p.startDate) return { startYM: '2023-01', endYM: '2025-12' };
+export function getProjectTimelineMonths(p: ProjectContract): { startYM: string; endYM: string; maxMonths: number } {
+  if (!p.startDate) return { startYM: '2023-01', endYM: '2025-12', maxMonths: 24 };
 
   const parsed = parseExcelDateYM(p.startDate, 2024);
   const startYM = parsed.ym;
   let y = parsed.year;
   let m = parsed.month;
 
-  const numMonths = p.realMonths || p.initialMonths || 24;
+  const mesD = p.mesInicial || p.initialMonths || 0;
+  const mesE = p.mesCvco || 0;
+  const mesG = p.mesEntregaUnidades || 0;
+  const maxMonths = Math.max(mesD, mesE, mesG) || p.realMonths || p.initialMonths || 24;
 
   let endY = y;
-  let endM = m + numMonths - 1;
+  let endM = m + maxMonths - 1;
   while (endM > 12) {
     endM -= 12;
     endY += 1;
   }
 
   const endYM = `${endY}-${String(endM).padStart(2, '0')}`;
-  return { startYM, endYM };
+  return { startYM, endYM, maxMonths };
 }
 
 export function calculateMonthlyDRE(
@@ -53,7 +56,7 @@ export function calculateMonthlyDRE(
     return true;
   });
 
-  // 2. Collect all unique YYYY-MM months strictly across transactions & project timelines
+  // 2. Collect all unique YYYY-MM months strictly across transactions & project timelines (startYM to endYM)
   const monthSet = new Set<string>();
   filtered.forEach((t) => {
     if (t.date) monthSet.add(t.date);
@@ -133,7 +136,7 @@ export function calculateMonthlyDRE(
     });
   });
 
-  // 4. Build monthly DRE columns reading strictly from DRE transactions in the database (0 fallback)
+  // 4. Build monthly DRE columns reading strictly from DRE transactions in the database
   const monthlyColumns: MonthlyDREColumn[] = sortedMonths.map((ym) => {
     const isFuture = ym > currentDateStr;
     const values: Record<DRELineKey, number> = {
@@ -193,7 +196,7 @@ export function calculateMonthlyDRE(
       }
     });
 
-    // Team Cost Calculation reading STRICTLY from DRE transactions in the database (0 fallback)
+    // Team Cost Calculation reading STRICTLY from DRE transactions in database with unified max(mesD, mesE, mesG)
     let computedTeamCostMonth = 0;
 
     activeProjectsList.forEach((p) => {
@@ -205,7 +208,7 @@ export function calculateMonthlyDRE(
       );
 
       if (settings.teamCostMode === 'estimado') {
-        // Mode 1: Sum estimated team cost transactions present in the database for month ym
+        // Mode 1: Sum estimated team cost transactions present in database for month ym
         const estSum = projTx
           .filter((t) => t.id.startsWith('est-team-') || t.sourceFile === 'INFORMAÇÕES_PROJETOS.xlsx')
           .reduce((acc, t) => acc + t.amount, 0);
