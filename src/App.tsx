@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar, TabType } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DRETimelineTab } from './pages/DRETimelineTab';
@@ -14,13 +14,15 @@ import { calculateMonthlyDRE } from './services/dreCalculator';
 import { storageService, isFirebaseConfigured } from './services/firebaseConfig';
 import { generateEstouroTransactions, generateEstimatedTeamCostTransactions } from './utils/excelParser';
 
-const DATA_VERSION = 'v6.0_pure_real_excel_data';
+const DATA_VERSION = 'v7.0_consolidated_store_fast';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'realizado' | 'projetado' | 'previsto_inicial'>('all');
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(isFirebaseConfigured ? 'synced' : 'offline');
+
+  const isRemoteUpdate = useRef(false);
 
   const [settings, setSettings] = useState<GlobalFinancialSettings>(() => {
     const saved = localStorage.getItem('dre_settings');
@@ -50,64 +52,45 @@ export function App() {
     return merged;
   });
 
-  // Real-time synchronization for Projects, Transactions, and Settings across multiple devices
+  // 1. Subscribe to Realtime Firestore updates across devices (No loop)
   useEffect(() => {
     if (!isFirebaseConfigured) return;
 
     setSyncStatus('syncing');
 
-    const unsubscribeProjects = storageService.subscribeProjects((remoteProjects) => {
-      setProjects(remoteProjects || []);
-      setSyncStatus('synced');
-    });
-
-    const unsubscribeTransactions = storageService.subscribeTransactions((remoteTxs) => {
-      const cleanTxs = (remoteTxs || []).filter((t) => !t.id.startsWith('seed-'));
-      setTransactions(cleanTxs);
-      setSyncStatus('synced');
-    });
-
-    const unsubscribeSettings = storageService.subscribeSettings((remoteSettings) => {
-      if (remoteSettings) {
-        setSettings(remoteSettings);
-        setSyncStatus('synced');
+    const unsubscribe = storageService.subscribeData((remote) => {
+      isRemoteUpdate.current = true;
+      if (remote.projects !== undefined) {
+        setProjects(remote.projects);
       }
+      if (remote.transactions !== undefined) {
+        const cleanTxs = (remote.transactions || []).filter((t: any) => !t.id.startsWith('seed-'));
+        setTransactions(cleanTxs);
+      }
+      if (remote.settings && Object.keys(remote.settings).length > 0) {
+        setSettings((prev) => ({ ...prev, ...remote.settings }));
+      }
+      setSyncStatus('synced');
     });
 
-    return () => {
-      unsubscribeProjects();
-      unsubscribeTransactions();
-      unsubscribeSettings();
-    };
+    return () => unsubscribe();
   }, []);
 
-  // Save & Sync Data upon state mutations
+  // 2. Debounced save to Firestore upon local state changes (Protected by isRemoteUpdate)
   useEffect(() => {
-    const syncData = async () => {
-      setSyncStatus('syncing');
-      await storageService.saveSettings(settings);
-      setSyncStatus(isFirebaseConfigured ? 'synced' : 'offline');
-    };
-    syncData();
-  }, [settings]);
+    if (isRemoteUpdate.current) {
+      isRemoteUpdate.current = false;
+      return;
+    }
 
-  useEffect(() => {
-    const syncData = async () => {
+    const timer = setTimeout(async () => {
       setSyncStatus('syncing');
-      await storageService.saveProjects(projects);
+      await storageService.saveData({ transactions, projects, settings });
       setSyncStatus(isFirebaseConfigured ? 'synced' : 'offline');
-    };
-    syncData();
-  }, [projects]);
+    }, 400);
 
-  useEffect(() => {
-    const syncData = async () => {
-      setSyncStatus('syncing');
-      await storageService.saveTransactions(transactions);
-      setSyncStatus(isFirebaseConfigured ? 'synced' : 'offline');
-    };
-    syncData();
-  }, [transactions]);
+    return () => clearTimeout(timer);
+  }, [transactions, projects, settings]);
 
   const handleUpdateSettings = (newSettings: Partial<GlobalFinancialSettings>) => {
     setSettings((prev) => ({ ...prev, ...newSettings }));
