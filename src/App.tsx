@@ -96,28 +96,37 @@ export function App() {
     setSyncStatus('syncing');
     try {
       if (isFirebaseConfigured) {
-        const remote = await storageService.getData();
-        if (remote) {
-          isRemoteUpdate.current = true;
-          if (remote.projects !== undefined) {
-            setProjects(remote.projects);
+        const res = await storageService.saveData({ transactions, projects, settings });
+
+        if (res.success) {
+          const remote = await storageService.getData();
+          if (remote) {
+            isRemoteUpdate.current = true;
+            if (remote.projects !== undefined) {
+              setProjects(remote.projects);
+            }
+            if (remote.transactions !== undefined) {
+              const cleanTxs = (remote.transactions || []).filter((t: any) => !t.id.startsWith('seed-'));
+              setTransactions(cleanTxs);
+            }
+            if (remote.settings && Object.keys(remote.settings).length > 0) {
+              setSettings((prev) => ({ ...prev, ...remote.settings }));
+            }
           }
-          if (remote.transactions !== undefined) {
-            const cleanTxs = (remote.transactions || []).filter((t: any) => !t.id.startsWith('seed-'));
-            setTransactions(cleanTxs);
-          }
-          if (remote.settings && Object.keys(remote.settings).length > 0) {
-            setSettings((prev) => ({ ...prev, ...remote.settings }));
-          }
+          setSyncStatus('synced');
+          alert(`✅ Sincronização concluída com sucesso no Firebase Cloud!\n\nProjetos salvos: ${projects.length}\nLançamentos salvos: ${transactions.length}`);
+        } else {
+          setSyncStatus('offline');
+          alert(`⚠️ Falha ao salvar no Firebase Cloud:\n${res.error}\n\nVerifique se o Firestore está ativado e com regras de leitura/escrita liberadas no Firebase Console.`);
         }
-        await storageService.saveData({ transactions, projects, settings });
-        setSyncStatus('synced');
       } else {
         setSyncStatus('offline');
+        alert('⚠️ Variáveis de ambiente do Firebase não foram encontradas (VITE_FIREBASE_API_KEY / VITE_FIREBASE_PROJECT_ID). Operando em Modo Local.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro na sincronização manual:', err);
       setSyncStatus('offline');
+      alert(`⚠️ Erro de conexão ao sincronizar: ${err?.message || String(err)}`);
     }
   };
 

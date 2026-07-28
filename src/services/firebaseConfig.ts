@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, getDoc, onSnapshot } from 'firebase/firestor
 
 export interface StorageAdapter {
   getData: () => Promise<{ transactions: any[]; projects: any[]; settings: any } | null>;
-  saveData: (data: { transactions: any[]; projects: any[]; settings: any }) => Promise<void>;
+  saveData: (data: { transactions: any[]; projects: any[]; settings: any }) => Promise<{ success: boolean; error?: string }>;
   subscribeData: (callback: (data: { transactions: any[]; projects: any[]; settings: any }) => void) => () => void;
   clearAll: () => Promise<void>;
   clearTransactions: () => Promise<void>;
@@ -60,14 +60,20 @@ class FirestoreStorageAdapter implements StorageAdapter {
     return null;
   }
 
-  async saveData(data: { transactions: any[]; projects: any[]; settings: any }): Promise<void> {
+  async saveData(data: { transactions: any[]; projects: any[]; settings: any }): Promise<{ success: boolean; error?: string }> {
     localStorage.setItem('dre_transactions', JSON.stringify(data.transactions || []));
     localStorage.setItem('dre_projects', JSON.stringify(data.projects || []));
     if (data.settings) {
       localStorage.setItem('dre_settings', JSON.stringify(data.settings));
     }
 
-    if (!db) return;
+    if (!isFirebaseConfigured) {
+      return { success: false, error: 'Chaves de ambiente Firebase não encontradas (VITE_FIREBASE_API_KEY / VITE_FIREBASE_PROJECT_ID).' };
+    }
+
+    if (!db) {
+      return { success: false, error: 'Conexão Firestore não inicializada.' };
+    }
 
     try {
       await setDoc(doc(db, 'dre_store', 'main_db'), {
@@ -76,8 +82,10 @@ class FirestoreStorageAdapter implements StorageAdapter {
         settings: data.settings || {},
         updatedAt: new Date().toISOString(),
       });
-    } catch (err) {
+      return { success: true };
+    } catch (err: any) {
       console.error('Erro ao salvar no Firestore:', err);
+      return { success: false, error: err?.message || String(err) };
     }
   }
 
@@ -147,8 +155,6 @@ class FirestoreStorageAdapter implements StorageAdapter {
           }
 
           callback({ transactions: txs, projects: projs, settings: stgs });
-        } else {
-          callback({ transactions: [], projects: [], settings: {} });
         }
       },
       (error) => {
