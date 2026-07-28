@@ -14,7 +14,7 @@ import { calculateMonthlyDRE } from './services/dreCalculator';
 import { storageService, isFirebaseConfigured } from './services/firebaseConfig';
 import { generateEstouroTransactions, generateEstimatedTeamCostTransactions } from './utils/excelParser';
 
-const DATA_VERSION = 'v7.0_consolidated_store_fast';
+const DATA_VERSION = 'v8.0_clean_slate_no_residuals';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
@@ -30,8 +30,17 @@ export function App() {
   });
 
   const [projects, setProjects] = useState<ProjectContract[]>(() => {
+    const savedVersion = localStorage.getItem('dre_data_version');
     const saved = localStorage.getItem('dre_projects');
-    return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
+
+    if (savedVersion === DATA_VERSION && saved) {
+      const parsed: ProjectContract[] = JSON.parse(saved);
+      return parsed;
+    }
+
+    localStorage.setItem('dre_data_version', DATA_VERSION);
+    localStorage.removeItem('dre_projects');
+    return [];
   });
 
   const [transactions, setTransactions] = useState<DRETransaction[]>(() => {
@@ -44,12 +53,8 @@ export function App() {
     }
 
     localStorage.setItem('dre_data_version', DATA_VERSION);
-    const initialEstouro = generateEstouroTransactions(INITIAL_PROJECTS);
-    const initialEstimatedTeam = generateEstimatedTeamCostTransactions(INITIAL_PROJECTS);
-
-    const merged = [...initialEstouro, ...initialEstimatedTeam];
-    localStorage.setItem('dre_transactions', JSON.stringify(merged));
-    return merged;
+    localStorage.removeItem('dre_transactions');
+    return [];
   });
 
   // 1. Subscribe to Realtime Firestore updates across devices (No loop)
@@ -199,7 +204,7 @@ export function App() {
   };
 
   const handleResetProjects = () => {
-    if (window.confirm('Deseja restaurar o cadastro de projetos inicial?')) {
+    if (window.confirm('Deseja restaurar o cadastro de projetos inicial com os dados oficiais de INFORMAÇÕES_PROJETOS?')) {
       isRemoteUpdate.current = false;
       setProjects(INITIAL_PROJECTS);
       const estouroTxs = generateEstouroTransactions(INITIAL_PROJECTS);

@@ -333,8 +333,9 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
 
     const startDate = formatExcelDateStr(r[1], '2023-01-01');
     const baselineEnd = formatExcelDateStr(r[2], '2025-12-01');
-    const replannedEnd = formatExcelDateStr(r[4] || r[2], baselineEnd);
-    const actualEnd = r[5] ? formatExcelDateStr(r[5]) : undefined;
+    const replannedEnd = r[5] ? formatExcelDateStr(r[5]) : baselineEnd;
+    const actualEndRaw = r[7] ? formatExcelDateStr(r[7]) : undefined;
+    const actualEnd = actualEndRaw && actualEndRaw >= startDate ? actualEndRaw : replannedEnd;
 
     const mesInicial = parseNum(r[3]) || 24;
     const mesCvco = parseNum(r[4]);
