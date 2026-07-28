@@ -215,19 +215,28 @@ export function detectSpreadsheetPreset(workbook: XLSX.WorkBook): SpreadsheetPre
       sheetNames.includes('Qoya') ||
       sheetNames.includes('Pace')
     ) {
+      const h = h0.includes('projeto') ? h0 : h1;
+      const startRow = h0.includes('projeto') ? 2 : 3;
+      const dateIdx = h.indexOf('mês') !== -1 ? h.indexOf('mês') : h.indexOf('mes') !== -1 ? h.indexOf('mes') : h.indexOf('data') !== -1 ? h.indexOf('data') : 4;
+      const projIdx = h.indexOf('projeto') !== -1 ? h.indexOf('projeto') : 0;
+      const amountIdx = h.indexOf('valor cobrado') !== -1 ? h.indexOf('valor cobrado') : h.indexOf('valor') !== -1 ? h.indexOf('valor') : 2;
+      const lineIdx = h.indexOf('tipologia') !== -1 ? h.indexOf('tipologia') : 1;
+
+      const isMulti = !sheetName.toLowerCase().includes('banco de dados') && sheetNames.includes('Unna');
+
       return {
         preset: 'RECEITAS_TAXA_ADM_BD',
         mode: 'financial_transactions',
         sheetName,
-        startRow: 2,
-        projectCol: '0',
-        dateCol: '1',
-        dreLineCol: '1',
-        amountCol: '2',
+        startRow,
+        projectCol: String(projIdx),
+        dateCol: String(dateIdx),
+        dreLineCol: String(lineIdx),
+        amountCol: String(amountIdx),
         status: 'realizado',
-        presetTitle: 'Banco de Dados de Taxas de Administração (Multi-Projetos)',
-        presetDescription: 'Detecção Automática: Consolidação por abas de obras com competência de cobrança de taxa ADM.',
-        isMultiSheetTaxaAdm: true,
+        presetTitle: 'Banco de Dados de Taxas de Administração (RECEITAS TAXA ADM.xlsx)',
+        presetDescription: 'Detecção Automática: Tabela com Projeto, Tipologia, Valor Cobrado e Mês (Coluna 4).',
+        isMultiSheetTaxaAdm: isMulti,
       };
     }
   }
@@ -583,8 +592,8 @@ export function processExcelImport(
   config: ExcelImportConfig,
   currentDateStr: string = new Date().toISOString().slice(0, 7)
 ): DRETransaction[] {
-  // Check if RECEITAS TAXA ADM multi-sheet file
-  const isMultiSheetTaxaAdm = workbook.SheetNames.includes('Unna') && workbook.SheetNames.includes('Qoya') && workbook.SheetNames.includes('Pace');
+  // Check if RECEITAS TAXA ADM multi-sheet file (legacy) vs database sheet ('Banco de Dados')
+  const isMultiSheetTaxaAdm = config.isMultiSheetTaxaAdm || (workbook.SheetNames.includes('Unna') && workbook.SheetNames.includes('Qoya') && !workbook.SheetNames.includes('Banco de Dados'));
   if (isMultiSheetTaxaAdm) {
     return parseMultiSheetReceitasTaxaAdm(workbook, config.fileName, currentDateStr);
   }
@@ -712,13 +721,12 @@ export function processExcelImport(
 
   const startIdx = Math.max(0, config.startRow - 1);
   const endIdx = config.endRow ? Math.min(rawData.length, config.endRow) : rawData.length;
-  const dataRows = rawData.slice(startIdx, endIdx);
 
-  dataRows.forEach((row, rowIdx) => {
-    if (!row || row.length === 0) return;
+  for (let rowIdx = startIdx; rowIdx < endIdx; rowIdx++) {
+    const row = rawData[rowIdx];
+    if (!row || row.length === 0) continue;
 
-    const rRealIdx = startIdx + rowIdx;
-    const dateCellData = config.mapping.dateCol !== undefined && config.mapping.dateCol !== '' ? getCellData(rRealIdx, parseInt(config.mapping.dateCol, 10)) : { rawVal: null, formattedVal: null };
+    const dateCellData = config.mapping.dateCol !== undefined && config.mapping.dateCol !== '' ? getCellData(rowIdx, parseInt(config.mapping.dateCol, 10)) : { rawVal: null, formattedVal: null };
     const dateVal = dateCellData.rawVal || dateCellData.formattedVal || (config.mapping.dateCol ? row[parseInt(config.mapping.dateCol, 10)] : null);
 
     const amountVal = config.mapping.amountCol !== undefined && config.mapping.amountCol !== '' ? row[parseInt(config.mapping.amountCol, 10)] : null;
@@ -727,13 +735,13 @@ export function processExcelImport(
     const dreLineVal = config.mapping.dreLineCol !== undefined && config.mapping.dreLineCol !== '' ? row[parseInt(config.mapping.dreLineCol, 10)] : '';
     const descVal = config.mapping.descriptionCol !== undefined && config.mapping.descriptionCol !== '' ? row[parseInt(config.mapping.descriptionCol, 10)] : '';
 
-    if (!amountVal && amountVal !== 0) return;
-    const parsedAmount = parseFloat(String(amountVal).replace(/[^0-9.-]+/g, ''));
-    if (isNaN(parsedAmount)) return;
+    if (!amountVal && amountVal !== 0) continue;
+    const parsedAmount = Math.abs(parseFloat(String(amountVal).replace(/[^0-9.-]+/g, '')));
+    if (isNaN(parsedAmount) || parsedAmount === 0) continue;
 
     const mappedKey = resolveLineKey(dreLineVal);
 
-    if (mappedKey === 'ignore') return;
+    if (mappedKey === 'ignore') continue;
 
     const parsedDate = parseExcelDateYM(dateVal, 2024);
     const formattedDate = parsedDate.ym;
@@ -759,7 +767,7 @@ export function processExcelImport(
       sourceSheet: config.sheetName,
       createdAt: new Date().toISOString(),
     });
-  });
+  }
 
   return transactions;
 }

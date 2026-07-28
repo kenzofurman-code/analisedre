@@ -127,6 +127,7 @@ export interface ExcelImportConfig {
   preselectedProject?: string;
   preselectedStatus?: TransactionStatus;
   preselectedDRELine?: DRELineKey;
+  isMultiSheetTaxaAdm?: boolean;
 }
 
 export interface MonthlyDREColumn {
