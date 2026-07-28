@@ -6,6 +6,27 @@ import {
   ProjectContract,
 } from '../types/dre';
 
+export function getProjectTimelineMonths(p: ProjectContract): { startYM: string; endYM: string } {
+  if (!p.startDate) return { startYM: '2023-01', endYM: '2025-12' };
+
+  const startYM = p.startDate.slice(0, 7);
+  const [yStr, mStr] = startYM.split('-');
+  let y = parseInt(yStr, 10) || 2024;
+  let m = parseInt(mStr, 10) || 1;
+
+  const numMonths = p.realMonths || p.initialMonths || 24;
+
+  let endY = y;
+  let endM = m + numMonths - 1;
+  while (endM > 12) {
+    endM -= 12;
+    endY += 1;
+  }
+
+  const endYM = `${endY}-${String(endM).padStart(2, '0')}`;
+  return { startYM, endYM };
+}
+
 export function calculateMonthlyDRE(
   transactions: DRETransaction[],
   projects: ProjectContract[],
@@ -42,18 +63,15 @@ export function calculateMonthlyDRE(
     : projects.filter((p) => selectedProjectsLower.includes(p.name.toLowerCase().trim()));
 
   activeProjectsList.forEach((p) => {
-    if (p.startDate) {
-      const start = p.startDate.slice(0, 7);
-      const end = (p.actualEndDate || p.replannedEndDate || p.baselineEndDate).slice(0, 7);
-      let curr = start;
-      let count = 0;
-      while (curr <= end && count < 120) {
-        monthSet.add(curr);
-        const [y, m] = curr.split('-').map(Number);
-        const nextDate = new Date(y, m, 1);
-        curr = nextDate.toISOString().slice(0, 7);
-        count++;
-      }
+    const { startYM, endYM } = getProjectTimelineMonths(p);
+    let curr = startYM;
+    let count = 0;
+    while (curr <= endYM && count < 120) {
+      monthSet.add(curr);
+      const [y, m] = curr.split('-').map(Number);
+      const nextDate = new Date(y, m, 1);
+      curr = nextDate.toISOString().slice(0, 7);
+      count++;
     }
   });
 
@@ -105,10 +123,9 @@ export function calculateMonthlyDRE(
   });
 
   projects.forEach((p) => {
-    const start = p.startDate ? p.startDate.slice(0, 7) : '2023-01';
-    const end = (p.actualEndDate || p.replannedEndDate || p.baselineEndDate || '2027-12').slice(0, 7);
+    const { startYM, endYM } = getProjectTimelineMonths(p);
     sortedMonths.forEach((ym) => {
-      if (ym >= start && ym <= end) {
+      if (ym >= startYM && ym <= endYM) {
         if (!globalActiveProjectsInMonth[ym]) globalActiveProjectsInMonth[ym] = new Set();
         globalActiveProjectsInMonth[ym].add(p.name);
       }
@@ -142,22 +159,21 @@ export function calculateMonthlyDRE(
 
     const monthTx = filtered.filter((t) => t.date === ym);
     monthTx.forEach((t) => {
-      if (t.dreLineKey in values) {
+      if (t.dreLineKey in values && t.dreLineKey !== 'custos_equipe') {
         values[t.dreLineKey] += t.amount;
       }
     });
 
-    // Team Cost Calculation for active selected projects according to settings.teamCostMode
+    // Team Cost Calculation for active selected projects strictly within project timeline
     let computedTeamCostMonth = 0;
 
     activeProjectsList.forEach((p) => {
-      const start = p.startDate ? p.startDate.slice(0, 7) : '';
-      const end = (p.actualEndDate || p.replannedEndDate || p.baselineEndDate || '').slice(0, 7);
-      const isWithinTimeline = Boolean(start && end && ym >= start && ym <= end);
+      const { startYM, endYM } = getProjectTimelineMonths(p);
+      const isWithinTimeline = Boolean(ym >= startYM && ym <= endYM);
       const estimatedCost = p.custoEquipeMensal || p.estimatedMonthlyTeamCost || 28000;
 
       if (settings.teamCostMode === 'estimado') {
-        // Mode 1: Purely Estimated Team Cost
+        // Mode 1: Purely Estimated Team Cost (Strictly within timeline)
         if (isWithinTimeline) {
           computedTeamCostMonth += estimatedCost;
         }
@@ -178,6 +194,7 @@ export function calculateMonthlyDRE(
         if (realSum > 0) {
           computedTeamCostMonth += realSum;
         } else if (isWithinTimeline) {
+          // Fallback to estimated ONLY if month is strictly within project timeline
           computedTeamCostMonth += estimatedCost;
         }
       }
