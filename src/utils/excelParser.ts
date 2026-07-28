@@ -117,6 +117,44 @@ export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: strin
 }
 
 /**
+ * Combines separate Year cell (Col B) and Month cell (Col C) into YYYY-MM format
+ */
+export function parseYearAndMonthStr(yearVal: any, monthVal: any, fallbackYear = 2025): string {
+  const yearNum = parseInt(String(yearVal || '').replace(/\D/g, ''), 10) || fallbackYear;
+  const strM = String(monthVal || '').toLowerCase().trim();
+
+  const monthNamesMap: Record<string, number> = {
+    jan: 1, january: 1, janeiro: 1,
+    fev: 2, feb: 2, february: 2, fevereiro: 2,
+    mar: 3, march: 3, marco: 3, março: 3,
+    abr: 4, apr: 4, april: 4, abril: 4,
+    mai: 5, may: 5, maio: 5,
+    jun: 6, june: 6, junho: 6,
+    jul: 7, july: 7, julho: 7,
+    ago: 8, aug: 8, august: 8, agosto: 8,
+    set: 9, sep: 9, sept: 9, september: 9, setembro: 9,
+    out: 10, oct: 10, october: 10, outubro: 10,
+    nov: 11, november: 11, novembro: 11,
+    dez: 12, dec: 12, december: 12, dezembro: 12,
+  };
+
+  let monthNum = 1;
+  for (const [mName, mNum] of Object.entries(monthNamesMap)) {
+    if (strM.includes(mName)) {
+      monthNum = mNum;
+      break;
+    }
+  }
+
+  const numM = parseInt(strM, 10);
+  if (!isNaN(numM) && numM >= 1 && numM <= 12) {
+    monthNum = numM;
+  }
+
+  return `${yearNum}-${String(monthNum).padStart(2, '0')}`;
+}
+
+/**
  * Smart Preset Detector for Refactored Spreadsheets
  */
 export function detectSpreadsheetPreset(workbook: XLSX.WorkBook): SpreadsheetPreset {
@@ -145,11 +183,11 @@ export function detectSpreadsheetPreset(workbook: XLSX.WorkBook): SpreadsheetPre
       startRow: 5,
       projectCol: '0',
       dateCol: '2',
-      dreLineCol: '0',
+      dreLineCol: '5',
       amountCol: '4',
       status: 'realizado',
       presetTitle: 'Custo Real de Mão de Obra de Equipe (Custo de MO POR PROJETO.xlsx)',
-      presetDescription: 'Detecção Automática: Relatório resumido de custos de equipe por projeto, ano e mês.',
+      presetDescription: 'Detecção Automática: Tabela com Ano (Col B) + Mês (Col C), Categoria (Col F) e Valor (Col E).',
     };
   }
 
@@ -375,57 +413,8 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
 }
 
 /**
- * Generate Estimated Team Cost Transactions from Project Register (Prazo Obras Cols D, E, G, J)
- */
-export function generateEstimatedTeamCostTransactions(
-  projects: ProjectContract[],
-  currentDateStr: string = new Date().toISOString().slice(0, 7)
-): DRETransaction[] {
-  const transactions: DRETransaction[] = [];
-
-  projects.forEach((p) => {
-    const custoMensal = p.custoEquipeMensal || p.estimatedMonthlyTeamCost || 0;
-    const mesD = p.mesInicial || 0;
-    const mesE = p.mesCvco || 0;
-    const mesG = p.mesEntregaUnidades || 0;
-    const maxMonths = Math.max(mesD, mesE, mesG) || p.realMonths || p.initialMonths || 24;
-
-    if (custoMensal > 0 && p.startDate) {
-      const startParsed = parseExcelDateYM(p.startDate, 2023);
-      let [y, m] = [startParsed.year, startParsed.month];
-
-      for (let step = 0; step < maxMonths; step++) {
-        const ym = `${y}-${String(m).padStart(2, '0')}`;
-        const isFuture = ym > currentDateStr;
-
-        transactions.push({
-          id: `est-team-${p.id || p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${ym}`,
-          project: p.name,
-          date: ym,
-          dreLineKey: 'custos_equipe',
-          amount: custoMensal,
-          status: isFuture ? 'projetado' : 'realizado',
-          isAutoForecast: isFuture,
-          description: `Custo Estimado Mensal de Equipe (Cronograma ${p.name})`,
-          sourceFile: 'INFORMAÇÕES_PROJETOS.xlsx',
-          sourceSheet: 'Prazo Obras',
-          createdAt: new Date().toISOString(),
-        });
-
-        m++;
-        if (m > 12) {
-          m = 1;
-          y++;
-        }
-      }
-    }
-  });
-
-  return transactions;
-}
-
-/**
  * Dedicated Parser for Custo de MO POR PROJETO.xlsx
+ * Combines Col B (Ano) + Col C (Mês) and reads Col F (Categoria -> CUSTO EQUIPE)
  */
 export function parseCustoMoPorProjeto(
   workbook: XLSX.WorkBook,
@@ -437,7 +426,7 @@ export function parseCustoMoPorProjeto(
   if (!sheet) return [];
 
   const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
-  if (rawData.length < 5) return [];
+  if (rawData.length < 4) return [];
 
   const transactions: DRETransaction[] = [];
 
@@ -448,17 +437,18 @@ export function parseCustoMoPorProjeto(
     const projName = String(r[0]).trim();
     if (projName.toLowerCase().includes('total') || projName.toLowerCase().includes('resultado')) continue;
 
-    const yearStr = r[1] ? String(r[1]).trim() : '2024';
-    const monthStr = r[2] ? String(r[2]).trim() : 'jan';
-    const amountVal = r[4] !== undefined ? r[4] : r[3];
+    const yearVal = r[1]; // Col B (Ano)
+    const monthVal = r[2]; // Col C (Mês)
+    const amountVal = r[4] !== undefined ? r[4] : r[3]; // Col E (Valor)
+    const categoryVal = r[5] ? String(r[5]).trim() : 'CUSTO EQUIPE'; // Col F (Categoria)
 
     if (amountVal === undefined || amountVal === null) continue;
     const parsedAmount = Math.abs(parseFloat(String(amountVal).replace(/[^0-9.-]+/g, '')) || 0);
 
     if (parsedAmount > 0) {
-      const yearNum = parseInt(yearStr, 10) || 2024;
-      const parsedM = parseExcelDateYM(monthStr, yearNum);
-      const formattedDate = `${yearNum}-${String(parsedM.month).padStart(2, '0')}`;
+      const formattedDate = parseYearAndMonthStr(yearVal, monthVal);
+      const dreKey = suggestDRELineKey(categoryVal);
+      const finalKey: DRELineKey = dreKey !== 'ignore' ? dreKey : 'custos_equipe';
 
       let finalStatus: TransactionStatus = 'realizado';
       let isAutoForecast = false;
@@ -468,10 +458,10 @@ export function parseCustoMoPorProjeto(
       }
 
       transactions.push({
-        id: `custo-mo-${projName}-${formattedDate}-${i}`,
+        id: `custo-mo-${projName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${formattedDate}-${i}`,
         project: projName,
         date: formattedDate,
-        dreLineKey: 'custos_equipe',
+        dreLineKey: finalKey,
         amount: parsedAmount,
         status: finalStatus,
         isAutoForecast,
@@ -542,6 +532,56 @@ export function parseMultiSheetReceitasTaxaAdm(
           sourceSheet: sheetName,
           createdAt: new Date().toISOString(),
         });
+      }
+    }
+  });
+
+  return transactions;
+}
+
+/**
+ * Generate Estimated Team Cost Transactions from Project Register (Prazo Obras Cols D, E, G, J)
+ */
+export function generateEstimatedTeamCostTransactions(
+  projects: ProjectContract[],
+  currentDateStr: string = new Date().toISOString().slice(0, 7)
+): DRETransaction[] {
+  const transactions: DRETransaction[] = [];
+
+  projects.forEach((p) => {
+    const custoMensal = p.custoEquipeMensal || p.estimatedMonthlyTeamCost || 0;
+    const mesD = p.mesInicial || 0;
+    const mesE = p.mesCvco || 0;
+    const mesG = p.mesEntregaUnidades || 0;
+    const maxMonths = Math.max(mesD, mesE, mesG) || p.realMonths || p.initialMonths || 24;
+
+    if (custoMensal > 0 && p.startDate) {
+      const startParsed = parseExcelDateYM(p.startDate, 2023);
+      let [y, m] = [startParsed.year, startParsed.month];
+
+      for (let step = 0; step < maxMonths; step++) {
+        const ym = `${y}-${String(m).padStart(2, '0')}`;
+        const isFuture = ym > currentDateStr;
+
+        transactions.push({
+          id: `est-team-${p.id || p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${ym}`,
+          project: p.name,
+          date: ym,
+          dreLineKey: 'custos_equipe',
+          amount: custoMensal,
+          status: isFuture ? 'projetado' : 'realizado',
+          isAutoForecast: isFuture,
+          description: `Custo Estimado Mensal de Equipe (Cronograma ${p.name})`,
+          sourceFile: 'INFORMAÇÕES_PROJETOS.xlsx',
+          sourceSheet: 'Prazo Obras',
+          createdAt: new Date().toISOString(),
+        });
+
+        m++;
+        if (m > 12) {
+          m = 1;
+          y++;
+        }
       }
     }
   });
@@ -654,7 +694,7 @@ export function suggestDRELineKey(labelStr: string): DRELineKey | 'ignore' {
   if (lower.includes('assistência') && lower.includes('receita')) return 'receita_assistencia';
   if (lower.includes('imposto') || lower.includes('pis') || lower.includes('iss') || lower.includes('cofins') || lower.includes('tributo')) return 'impostos';
   if (lower.includes('assistência') && (lower.includes('despesa') || lower.includes('custo'))) return 'despesa_assistencia';
-  if (lower.includes('equipe') || lower.includes('mão de obra') || lower.includes('mo') || lower.includes('salário') || lower.includes('folha')) return 'custos_equipe';
+  if (lower.includes('equipe') || lower.includes('mão de obra') || lower.includes('mo') || lower.includes('salário') || lower.includes('folha') || lower.includes('custo equipe')) return 'custos_equipe';
   if (lower.includes('deslocamento') || lower.includes('viagem') || lower.includes('combustível') || lower.includes('logística')) return 'custos_deslocamento';
   if (lower.includes('adm pie') || lower.includes('despesa adm') || lower.includes('escritório')) return 'despesas_adm_pie';
 
