@@ -131,21 +131,30 @@ export function App() {
   };
 
   const handleUpdateSettings = (newSettings: Partial<GlobalFinancialSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    setSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      isRemoteUpdate.current = false;
+      storageService.saveData({ transactions, projects, settings: updated });
+      return updated;
+    });
   };
 
   const handleImportComplete = (newTxs: DRETransaction[]) => {
+    isRemoteUpdate.current = false;
     setTransactions((prev) => {
       const cleanPrev = prev.filter((t) => !t.id.startsWith('seed-'));
       const map = new Map<string, DRETransaction>();
       cleanPrev.forEach((t) => map.set(t.id, t));
       newTxs.forEach((t) => map.set(t.id, t));
-      return Array.from(map.values());
+      const updatedList = Array.from(map.values());
+      storageService.saveData({ transactions: updatedList, projects, settings });
+      return updatedList;
     });
     setActiveTab('query');
   };
 
   const handleImportProjects = (newProjects: ProjectContract[]) => {
+    isRemoteUpdate.current = false;
     setProjects((prev) => {
       const map = new Map<string, ProjectContract>();
       prev.forEach((p) => map.set(p.name.toLowerCase(), p));
@@ -155,16 +164,16 @@ export function App() {
       });
       const updatedList = Array.from(map.values());
 
-      // Auto Generate Estouro Transactions for projects with estouroContratada
       const estouroTxs = generateEstouroTransactions(updatedList);
-      // Auto Generate Estimated Team Cost Transactions for projects from Col J & Max(D, E, G)
       const estimatedTeamTxs = generateEstimatedTeamCostTransactions(updatedList);
 
       setTransactions((prevTxs) => {
         const filteredTxs = prevTxs.filter(
           (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-') && !t.id.startsWith('seed-')
         );
-        return [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
+        const mergedTxs = [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
+        storageService.saveData({ transactions: mergedTxs, projects: updatedList, settings });
+        return mergedTxs;
       });
 
       return updatedList;
@@ -173,11 +182,17 @@ export function App() {
   };
 
   const handleDeleteProject = (projectId: string) => {
-    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    isRemoteUpdate.current = false;
+    setProjects((prev) => {
+      const updated = prev.filter((p) => p.id !== projectId);
+      storageService.saveData({ transactions, projects: updated, settings });
+      return updated;
+    });
   };
 
   const handleClearAllProjects = async () => {
     if (window.confirm('Tem certeza que deseja limpar todo o cadastro de projetos e apagar do Firebase?')) {
+      isRemoteUpdate.current = false;
       setProjects([]);
       await storageService.clearProjects();
     }
@@ -185,6 +200,7 @@ export function App() {
 
   const handleResetProjects = () => {
     if (window.confirm('Deseja restaurar o cadastro de projetos inicial?')) {
+      isRemoteUpdate.current = false;
       setProjects(INITIAL_PROJECTS);
       const estouroTxs = generateEstouroTransactions(INITIAL_PROJECTS);
       const estimatedTeamTxs = generateEstimatedTeamCostTransactions(INITIAL_PROJECTS);
@@ -192,12 +208,15 @@ export function App() {
         const filteredTxs = prevTxs.filter(
           (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-') && !t.id.startsWith('seed-')
         );
-        return [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
+        const mergedTxs = [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
+        storageService.saveData({ transactions: mergedTxs, projects: INITIAL_PROJECTS, settings });
+        return mergedTxs;
       });
     }
   };
 
   const handleAddProject = (newProj: ProjectContract) => {
+    isRemoteUpdate.current = false;
     setProjects((prev) => {
       const updated = [newProj, ...prev];
       const estouroTxs = generateEstouroTransactions(updated);
@@ -206,29 +225,47 @@ export function App() {
         const filteredTxs = prevTxs.filter(
           (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-') && !t.id.startsWith('seed-')
         );
-        return [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
+        const mergedTxs = [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
+        storageService.saveData({ transactions: mergedTxs, projects: updated, settings });
+        return mergedTxs;
       });
       return updated;
     });
   };
 
   const handleDeleteTransaction = (id: string) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+    isRemoteUpdate.current = false;
+    setTransactions((prev) => {
+      const updated = prev.filter((t) => t.id !== id);
+      storageService.saveData({ transactions: updated, projects, settings });
+      return updated;
+    });
   };
 
   const handleClearAllTransactions = async () => {
     if (window.confirm('Tem certeza que deseja limpar todos os lançamentos do banco de dados e apagar do Firebase?')) {
+      isRemoteUpdate.current = false;
       setTransactions([]);
       await storageService.clearTransactions();
     }
   };
 
   const handleAddTransaction = (tx: DRETransaction) => {
-    setTransactions((prev) => [tx, ...prev]);
+    isRemoteUpdate.current = false;
+    setTransactions((prev) => {
+      const updated = [tx, ...prev];
+      storageService.saveData({ transactions: updated, projects, settings });
+      return updated;
+    });
   };
 
   const handleUpdateTransaction = (updatedTx: DRETransaction) => {
-    setTransactions((prev) => prev.map((t) => (t.id === updatedTx.id ? updatedTx : t)));
+    isRemoteUpdate.current = false;
+    setTransactions((prev) => {
+      const updated = prev.map((t) => (t.id === updatedTx.id ? updatedTx : t));
+      storageService.saveData({ transactions: updated, projects, settings });
+      return updated;
+    });
   };
 
   // Compute monthly DRE data for timeline and cashflow filtered by selectedProjects
