@@ -130,20 +130,43 @@ export function calculateMonthlyDRE(
       }
     });
 
-    // Team Cost Mode switch
-    if (settings.teamCostMode === 'estimado') {
-      let estimatedTeamCostMonth = 0;
-      const relevantProjects = selectedProject === 'all' ? projects : projects.filter((p) => p.name === selectedProject);
+    // Team Cost Calculation according to settings.teamCostMode
+    const relevantProjects = selectedProject === 'all' ? projects : projects.filter((p) => p.name === selectedProject);
+    let computedTeamCostMonth = 0;
 
-      relevantProjects.forEach((p) => {
-        const start = p.startDate ? p.startDate.slice(0, 7) : '';
-        const end = (p.actualEndDate || p.replannedEndDate || p.baselineEndDate || '').slice(0, 7);
-        if (start && end && ym >= start && ym <= end) {
-          estimatedTeamCostMonth += p.estimatedMonthlyTeamCost || 28000;
+    relevantProjects.forEach((p) => {
+      const start = p.startDate ? p.startDate.slice(0, 7) : '';
+      const end = (p.actualEndDate || p.replannedEndDate || p.baselineEndDate || '').slice(0, 7);
+      const isWithinTimeline = Boolean(start && end && ym >= start && ym <= end);
+      const estimatedCost = p.custoEquipeMensal || p.estimatedMonthlyTeamCost || 28000;
+
+      if (settings.teamCostMode === 'estimado') {
+        // Mode 1: Purely Estimated Team Cost
+        if (isWithinTimeline) {
+          computedTeamCostMonth += estimatedCost;
         }
-      });
-      values.custos_equipe = estimatedTeamCostMonth;
-    }
+      } else {
+        // Mode 2: Real Team Cost with Fallback to Estimated
+        const realTxForProjMonth = transactions.filter(
+          (t) =>
+            t.project.toLowerCase() === p.name.toLowerCase() &&
+            t.date === ym &&
+            t.dreLineKey === 'custos_equipe' &&
+            !t.id.startsWith('est-team-') &&
+            t.sourceFile !== 'INFORMAÇÕES_PROJETOS.xlsx'
+        );
+
+        const realSum = realTxForProjMonth.reduce((acc, t) => acc + t.amount, 0);
+
+        if (realSum > 0) {
+          computedTeamCostMonth += realSum;
+        } else if (isWithinTimeline) {
+          computedTeamCostMonth += estimatedCost;
+        }
+      }
+    });
+
+    values.custos_equipe = computedTeamCostMonth;
 
     const grossRevenue =
       values.receita_taxa_adm + values.permuta_taxa_adm + values.receita_mo_adm + values.receita_assistencia;
