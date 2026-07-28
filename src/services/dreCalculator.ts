@@ -133,7 +133,7 @@ export function calculateMonthlyDRE(
     });
   });
 
-  // 4. Build monthly DRE columns
+  // 4. Build monthly DRE columns reading directly from DRE transactions
   const monthlyColumns: MonthlyDREColumn[] = sortedMonths.map((ym) => {
     const isFuture = ym > currentDateStr;
     const values: Record<DRELineKey, number> = {
@@ -193,38 +193,48 @@ export function calculateMonthlyDRE(
       }
     });
 
-    // Team Cost Calculation for active selected projects strictly within project timeline (startYM to endYM)
+    // Team Cost Calculation reading DRE transactions for selected active projects
     let computedTeamCostMonth = 0;
 
     activeProjectsList.forEach((p) => {
       const { startYM, endYM } = getProjectTimelineMonths(p);
       const isWithinTimeline = Boolean(ym >= startYM && ym <= endYM);
-      const estimatedCost = p.custoEquipeMensal || p.estimatedMonthlyTeamCost || 28000;
+
+      // Find real team cost transactions (sourceFile !== INFORMAÇÕES_PROJETOS.xlsx)
+      const realTxForProjMonth = monthTx.filter(
+        (t) =>
+          t.project &&
+          t.project.toLowerCase().trim() === p.name.toLowerCase().trim() &&
+          t.dreLineKey === 'custos_equipe' &&
+          !t.id.startsWith('est-team-') &&
+          t.sourceFile !== 'INFORMAÇÕES_PROJETOS.xlsx'
+      );
+
+      const realSum = realTxForProjMonth.reduce((acc, t) => acc + t.amount, 0);
+
+      // Find estimated team cost transactions generated from project info
+      const estTxForProjMonth = monthTx.filter(
+        (t) =>
+          t.project &&
+          t.project.toLowerCase().trim() === p.name.toLowerCase().trim() &&
+          t.dreLineKey === 'custos_equipe' &&
+          (t.id.startsWith('est-team-') || t.sourceFile === 'INFORMAÇÕES_PROJETOS.xlsx')
+      );
+
+      const estSum = estTxForProjMonth.reduce((acc, t) => acc + t.amount, 0);
+      const fallbackEstAmount = estSum > 0 ? estSum : (p.custoEquipeMensal || p.estimatedMonthlyTeamCost || 28000);
 
       if (settings.teamCostMode === 'estimado') {
-        // Mode 1: Purely Estimated Team Cost (Strictly within timeline)
+        // Mode 1: Purely Estimated Team Cost (from DRE transactions or timeline fallback)
         if (isWithinTimeline) {
-          computedTeamCostMonth += estimatedCost;
+          computedTeamCostMonth += fallbackEstAmount;
         }
       } else {
-        // Mode 2: Real Team Cost with Fallback to Estimated (Case-insensitive project matching)
-        const realTxForProjMonth = transactions.filter(
-          (t) =>
-            t.project &&
-            t.project.toLowerCase().trim() === p.name.toLowerCase().trim() &&
-            t.date === ym &&
-            t.dreLineKey === 'custos_equipe' &&
-            !t.id.startsWith('est-team-') &&
-            t.sourceFile !== 'INFORMAÇÕES_PROJETOS.xlsx'
-        );
-
-        const realSum = realTxForProjMonth.reduce((acc, t) => acc + t.amount, 0);
-
+        // Mode 2: Real Team Cost with Fallback to Estimated
         if (realSum > 0) {
           computedTeamCostMonth += realSum;
         } else if (isWithinTimeline) {
-          // Fallback to estimated ONLY if month is strictly within project timeline
-          computedTeamCostMonth += estimatedCost;
+          computedTeamCostMonth += fallbackEstAmount;
         }
       }
     });
