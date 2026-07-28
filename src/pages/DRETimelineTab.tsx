@@ -69,7 +69,7 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
     return activeMonthlyColumns.filter((col) => col.yearMonth.startsWith(selectedYear));
   }, [activeMonthlyColumns, selectedYear, viewMode]);
 
-  // Totals calculation
+  // Totals calculation for displayColumns
   const totalReceitaBruta = displayColumns.reduce(
     (acc, col) =>
       acc +
@@ -181,7 +181,7 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
           <div>
             <h3 className="text-base font-bold text-slate-100">Visão Temporal do DRE ({displayColumns.length} Meses Ativos)</h3>
             <p className="text-xs text-slate-400">
-              Exibindo apenas meses com lançamentos. O cabeçalho dos meses e a 1ª coluna de descrições estão congelados ao rolar.
+              A 2ª coluna exibe a <strong>soma acumulada</strong> do período/ano selecionado. Ambas as primeiras colunas permanecem congeladas.
             </p>
           </div>
         </div>
@@ -244,15 +244,20 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
         </div>
       </div>
 
-      {/* Main DRE Matrix Grid with Frozen Headers & Sticky 1st Column */}
+      {/* Main DRE Matrix Grid with Frozen Headers & Sticky 1st & 2nd Columns */}
       <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-280px)] scrollbar-thin">
           <table className="w-full text-xs text-left border-separate border-spacing-0">
             <thead className="sticky top-0 z-30 bg-slate-900 text-slate-300 font-bold border-b border-slate-700">
               <tr>
-                {/* Frozen Corner Header (Top-Left Sticky) */}
+                {/* Frozen Corner Header 1 (Top-Left 1 Sticky) */}
                 <th className="sticky top-0 left-0 z-40 bg-slate-900 border-r border-b border-slate-800 px-4 py-3.5 w-72 min-w-[280px] shadow-sm">
                   DADOS (Linhas DRE)
+                </th>
+
+                {/* Frozen Corner Header 2 (Top-Left 2 Sticky - TOTAL) */}
+                <th className="sticky top-0 left-[280px] z-40 bg-slate-900 border-r-2 border-b border-slate-700 text-right px-4 py-3.5 w-36 min-w-[140px] text-blue-400 font-mono font-bold shadow-sm">
+                  {viewMode === 'all' ? 'TOTAL PROJETO' : `TOTAL (${selectedYear})`}
                 </th>
 
                 {/* Sticky Month Headers */}
@@ -309,6 +314,24 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
                   valStyle = 'text-slate-400 font-mono';
                 }
 
+                // Calculate Total for line across displayColumns
+                let totalLineVal = 0;
+                let formattedTotal = '-';
+
+                if (line.key === 'margem_bruta_pct') {
+                  totalLineVal = totalReceitaBruta > 0 ? (totalMargemBruta / totalReceitaBruta) * 100 : 0;
+                  formattedTotal = formatPercent(totalLineVal);
+                } else if (line.key === 'margem_liquida_pct') {
+                  totalLineVal = totalReceitaBruta > 0 ? (totalResultadoFinal / totalReceitaBruta) * 100 : 0;
+                  formattedTotal = formatPercent(totalLineVal);
+                } else if (line.key === 'curva_fisica_obra') {
+                  totalLineVal = displayColumns.length > 0 ? displayColumns.reduce((acc, c) => acc + (c.values.curva_fisica_obra || 0), 0) / displayColumns.length : 0;
+                  formattedTotal = formatPercent(totalLineVal);
+                } else {
+                  totalLineVal = displayColumns.reduce((acc, col) => acc + (col.values[line.key] || 0), 0);
+                  formattedTotal = formatMoney(totalLineVal);
+                }
+
                 const isActiveClicked = activeTooltipLineKey === line.key;
 
                 return (
@@ -319,7 +342,7 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
                       isActiveClicked ? 'ring-1 ring-blue-500/50 bg-blue-950/20' : ''
                     }`}
                   >
-                    {/* Frozen 1st Column (Sticky Left) */}
+                    {/* Frozen 1st Column (Sticky Left 0) */}
                     <td
                       className={`sticky left-0 z-20 px-4 py-2.5 border-r border-b border-slate-800 ${stickyColBg} shadow-sm`}
                     >
@@ -334,6 +357,15 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
                           }`}
                         />
                       </div>
+                    </td>
+
+                    {/* Frozen 2nd Column (Sticky Left 280px - TOTAL ACUMULADO) */}
+                    <td
+                      className={`sticky left-[280px] z-20 px-4 py-2.5 text-right border-r-2 border-b border-slate-700/80 ${stickyColBg} shadow-sm font-mono font-bold ${
+                        line.key.includes('margem') || line.key.includes('resultado') ? 'text-blue-300' : 'text-slate-200'
+                      }`}
+                    >
+                      {formattedTotal}
                     </td>
 
                     {/* Monthly Values */}
