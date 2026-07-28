@@ -57,19 +57,14 @@ export function App() {
     setSyncStatus('syncing');
 
     const unsubscribeProjects = storageService.subscribeProjects((remoteProjects) => {
-      if (remoteProjects && remoteProjects.length > 0) {
-        setProjects(remoteProjects);
-        setSyncStatus('synced');
-      }
+      setProjects(remoteProjects || []);
+      setSyncStatus('synced');
     });
 
     const unsubscribeTransactions = storageService.subscribeTransactions((remoteTxs) => {
-      if (remoteTxs && remoteTxs.length > 0) {
-        // Filter out legacy seed transactions
-        const cleanTxs = remoteTxs.filter((t) => !t.id.startsWith('seed-'));
-        setTransactions(cleanTxs);
-        setSyncStatus('synced');
-      }
+      const cleanTxs = (remoteTxs || []).filter((t) => !t.id.startsWith('seed-'));
+      setTransactions(cleanTxs);
+      setSyncStatus('synced');
     });
 
     const unsubscribeSettings = storageService.subscribeSettings((remoteSettings) => {
@@ -160,9 +155,10 @@ export function App() {
     setProjects((prev) => prev.filter((p) => p.id !== projectId));
   };
 
-  const handleClearAllProjects = () => {
-    if (window.confirm('Tem certeza que deseja limpar todo o cadastro de projetos?')) {
+  const handleClearAllProjects = async () => {
+    if (window.confirm('Tem certeza que deseja limpar todo o cadastro de projetos e apagar do Firebase?')) {
       setProjects([]);
+      await storageService.clearProjects();
     }
   };
 
@@ -199,9 +195,10 @@ export function App() {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const handleClearAllTransactions = () => {
-    if (window.confirm('Tem certeza que deseja limpar todos os lançamentos do banco de dados?')) {
+  const handleClearAllTransactions = async () => {
+    if (window.confirm('Tem certeza que deseja limpar todos os lançamentos do banco de dados e apagar do Firebase?')) {
       setTransactions([]);
+      await storageService.clearTransactions();
     }
   };
 

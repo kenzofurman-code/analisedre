@@ -1,12 +1,14 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, setDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, setDoc, onSnapshot, writeBatch, deleteDoc } from 'firebase/firestore';
 
 export interface StorageAdapter {
   getTransactions: () => Promise<any[]>;
   saveTransactions: (txs: any[]) => Promise<void>;
+  clearTransactions: () => Promise<void>;
   subscribeTransactions: (callback: (txs: any[]) => void) => () => void;
   getProjects: () => Promise<any[]>;
   saveProjects: (projects: any[]) => Promise<void>;
+  clearProjects: () => Promise<void>;
   subscribeProjects: (callback: (projects: any[]) => void) => () => void;
   getSettings: () => Promise<any>;
   saveSettings: (settings: any) => Promise<void>;
@@ -54,20 +56,44 @@ class FirestoreStorageAdapter implements StorageAdapter {
 
   async saveTransactions(txs: any[]): Promise<void> {
     localStorage.setItem('dre_transactions', JSON.stringify(txs));
-    if (db && txs.length > 0) {
-      try {
-        const CHUNK_SIZE = 450;
-        for (let i = 0; i < txs.length; i += CHUNK_SIZE) {
-          const batch = writeBatch(db);
-          const chunk = txs.slice(i, i + CHUNK_SIZE);
-          chunk.forEach((tx) => {
-            batch.set(doc(db!, 'transactions', tx.id), tx);
-          });
-          await batch.commit();
-        }
-      } catch (err) {
-        console.error('Erro ao salvar no Firestore (batch):', err);
+
+    if (!db) return;
+
+    if (txs.length === 0) {
+      await this.clearTransactions();
+      return;
+    }
+
+    try {
+      const CHUNK_SIZE = 450;
+      for (let i = 0; i < txs.length; i += CHUNK_SIZE) {
+        const batch = writeBatch(db);
+        const chunk = txs.slice(i, i + CHUNK_SIZE);
+        chunk.forEach((tx) => {
+          batch.set(doc(db!, 'transactions', tx.id), tx);
+        });
+        await batch.commit();
       }
+    } catch (err) {
+      console.error('Erro ao salvar no Firestore (batch):', err);
+    }
+  }
+
+  async clearTransactions(): Promise<void> {
+    localStorage.setItem('dre_transactions', '[]');
+    if (!db) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, 'transactions'));
+      const docs = querySnapshot.docs;
+      const CHUNK_SIZE = 450;
+      for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+        const batch = writeBatch(db);
+        const chunk = docs.slice(i, i + CHUNK_SIZE);
+        chunk.forEach((docSnap) => batch.delete(docSnap.ref));
+        await batch.commit();
+      }
+    } catch (err) {
+      console.error('Erro ao apagar collection transactions no Firestore:', err);
     }
   }
 
@@ -78,10 +104,8 @@ class FirestoreStorageAdapter implements StorageAdapter {
       (snapshot) => {
         const txs: any[] = [];
         snapshot.forEach((docSnap) => txs.push(docSnap.data()));
-        if (txs.length > 0) {
-          localStorage.setItem('dre_transactions', JSON.stringify(txs));
-          callback(txs);
-        }
+        localStorage.setItem('dre_transactions', JSON.stringify(txs));
+        callback(txs);
       },
       (error) => {
         console.error('Erro no listener em tempo real de transactions:', error);
@@ -107,16 +131,36 @@ class FirestoreStorageAdapter implements StorageAdapter {
 
   async saveProjects(projects: any[]): Promise<void> {
     localStorage.setItem('dre_projects', JSON.stringify(projects));
-    if (db && projects.length > 0) {
-      try {
-        const batch = writeBatch(db);
-        projects.forEach((p) => {
-          batch.set(doc(db!, 'projects', p.id), p);
-        });
-        await batch.commit();
-      } catch (err) {
-        console.error('Erro ao salvar projetos no Firestore:', err);
-      }
+
+    if (!db) return;
+
+    if (projects.length === 0) {
+      await this.clearProjects();
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      projects.forEach((p) => {
+        batch.set(doc(db!, 'projects', p.id), p);
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error('Erro ao salvar projetos no Firestore:', err);
+    }
+  }
+
+  async clearProjects(): Promise<void> {
+    localStorage.setItem('dre_projects', '[]');
+    if (!db) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, 'projects'));
+      const docs = querySnapshot.docs;
+      const batch = writeBatch(db);
+      docs.forEach((docSnap) => batch.delete(docSnap.ref));
+      await batch.commit();
+    } catch (err) {
+      console.error('Erro ao apagar collection projects no Firestore:', err);
     }
   }
 
@@ -127,10 +171,8 @@ class FirestoreStorageAdapter implements StorageAdapter {
       (snapshot) => {
         const projects: any[] = [];
         snapshot.forEach((docSnap) => projects.push(docSnap.data()));
-        if (projects.length > 0) {
-          localStorage.setItem('dre_projects', JSON.stringify(projects));
-          callback(projects);
-        }
+        localStorage.setItem('dre_projects', JSON.stringify(projects));
+        callback(projects);
       },
       (error) => {
         console.error('Erro no listener em tempo real de projetos:', error);
