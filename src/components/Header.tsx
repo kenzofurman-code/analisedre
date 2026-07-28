@@ -12,6 +12,7 @@ interface HeaderProps {
   statusFilter: 'all' | 'realizado' | 'projetado' | 'previsto_inicial';
   onSelectStatusFilter: (status: 'all' | 'realizado' | 'projetado' | 'previsto_inicial') => void;
   syncStatus: SyncStatus;
+  onManualSync?: () => void;
   settings: GlobalFinancialSettings;
   onUpdateSettings: (newSettings: Partial<GlobalFinancialSettings>) => void;
 }
@@ -25,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   statusFilter,
   onSelectStatusFilter,
   syncStatus,
+  onManualSync,
   settings,
   onUpdateSettings,
 }) => {
@@ -33,40 +35,40 @@ export const Header: React.FC<HeaderProps> = ({
   const renderSyncBadge = () => {
     if (syncStatus === 'syncing') {
       return (
-        <div
-          className="flex items-center space-x-1.5 bg-blue-950/50 border border-blue-500/50 text-blue-400 px-3 py-1 rounded-full text-xs font-semibold shadow-xs"
-          title="Sincronizando dados com o banco de dados Firebase..."
+        <button
+          onClick={onManualSync}
+          disabled
+          className="flex items-center space-x-1.5 bg-blue-950/80 border border-blue-500/50 text-blue-400 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-xs cursor-wait"
+          title="Sincronizando dados com o banco de dados Firebase Cloud..."
         >
           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
           <span>Sincronizando...</span>
-        </div>
+        </button>
       );
     }
 
     if (syncStatus === 'offline') {
       return (
-        <div
-          className="flex items-center space-x-1.5 bg-amber-950/50 border border-amber-500/50 text-amber-400 px-3 py-1 rounded-full text-xs font-semibold shadow-xs"
-          title="Modo LocalStorage: Operando com dados salvos no navegador"
+        <button
+          onClick={onManualSync}
+          className="flex items-center space-x-1.5 bg-amber-950/80 hover:bg-amber-900/80 border border-amber-500/50 text-amber-300 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer"
+          title="Modo Local: Clique para testar a conexão e forçar a sincronização com o Firebase Cloud"
         >
-          <div className="w-4 h-4 rounded bg-amber-500 text-dark-900 flex items-center justify-center font-bold text-[10px]">
-            !
-          </div>
-          <span>Modo Offline</span>
-        </div>
+          <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+          <span>Modo Local (Clique p/ Sincronizar)</span>
+        </button>
       );
     }
 
     return (
-      <div
-        className="flex items-center space-x-1.5 bg-emerald-950/50 border border-emerald-500/50 text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold shadow-xs"
-        title="Dados sincronizados com o banco de dados Firebase Cloud"
+      <button
+        onClick={onManualSync}
+        className="flex items-center space-x-1.5 bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer"
+        title="Conectado ao Firebase Cloud. Clique para forçar a re-sincronização imediata."
       >
-        <div className="w-4 h-4 rounded bg-emerald-500 text-dark-900 flex items-center justify-center font-bold text-[10px]">
-          ✓
-        </div>
-        <span>Sincronizado</span>
-      </div>
+        <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+        <span>Sincronizado (Clique p/ Atualizar)</span>
+      </button>
     );
   };
 
@@ -142,7 +144,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* SYNC STATUS BADGE (PLACED BETWEEN FILTERS AND SETTINGS BUTTON) */}
+            {/* SYNC STATUS BUTTON (INTERACTIVE INTERFACE) */}
             {renderSyncBadge()}
 
             {/* Settings Drawer Trigger Button */}

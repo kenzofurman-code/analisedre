@@ -92,6 +92,35 @@ export function App() {
     return () => clearTimeout(timer);
   }, [transactions, projects, settings]);
 
+  const handleManualSync = async () => {
+    setSyncStatus('syncing');
+    try {
+      if (isFirebaseConfigured) {
+        const remote = await storageService.getData();
+        if (remote) {
+          isRemoteUpdate.current = true;
+          if (remote.projects !== undefined) {
+            setProjects(remote.projects);
+          }
+          if (remote.transactions !== undefined) {
+            const cleanTxs = (remote.transactions || []).filter((t: any) => !t.id.startsWith('seed-'));
+            setTransactions(cleanTxs);
+          }
+          if (remote.settings && Object.keys(remote.settings).length > 0) {
+            setSettings((prev) => ({ ...prev, ...remote.settings }));
+          }
+        }
+        await storageService.saveData({ transactions, projects, settings });
+        setSyncStatus('synced');
+      } else {
+        setSyncStatus('offline');
+      }
+    } catch (err) {
+      console.error('Erro na sincronização manual:', err);
+      setSyncStatus('offline');
+    }
+  };
+
   const handleUpdateSettings = (newSettings: Partial<GlobalFinancialSettings>) => {
     setSettings((prev) => ({ ...prev, ...newSettings }));
   };
@@ -248,6 +277,7 @@ export function App() {
           statusFilter={statusFilter}
           onSelectStatusFilter={setStatusFilter}
           syncStatus={syncStatus}
+          onManualSync={handleManualSync}
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
         />
