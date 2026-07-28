@@ -9,9 +9,128 @@ export interface ParsedSheetPreview {
   headers: { index: number; colLetter: string; sampleVal: string }[];
 }
 
+export interface SpreadsheetPreset {
+  preset: 'INFORMAÇÕES_PROJETOS' | 'PREVISAO_DRE_OBRAS' | 'RECEITAS_MO_ADM' | 'RECEITAS_TAXA_ADM_BD' | 'CUSTOM_GENERIC';
+  mode: 'projects_register' | 'financial_transactions';
+  sheetName?: string;
+  startRow?: number;
+  projectCol?: string;
+  dateCol?: string;
+  dreLineCol?: string;
+  amountCol?: string;
+  status?: TransactionStatus;
+  presetTitle?: string;
+  presetDescription?: string;
+}
+
 export function parseExcelFileSheets(fileBuffer: ArrayBuffer): { sheetNames: string[]; workbook: XLSX.WorkBook } {
   const workbook = XLSX.read(fileBuffer, { type: 'array', cellDates: true });
   return { sheetNames: workbook.SheetNames, workbook };
+}
+
+/**
+ * Smart Preset Detector for Refactored Spreadsheets
+ */
+export function detectSpreadsheetPreset(workbook: XLSX.WorkBook): SpreadsheetPreset {
+  const sheetNames = workbook.SheetNames;
+
+  // 1. Check INFORMAÇÕES_PROJETOS
+  const hasPrazo = sheetNames.some((s) => s.toLowerCase().includes('prazo'));
+  const hasCusto = sheetNames.some((s) => s.toLowerCase().includes('custo'));
+  if (hasPrazo && hasCusto) {
+    return {
+      preset: 'INFORMAÇÕES_PROJETOS',
+      mode: 'projects_register',
+      presetTitle: 'Cadastro de Projetos (INFORMAÇÕES_PROJETOS.xlsx)',
+      presetDescription: 'Detecção Automática: Planilha oficial com cadastro, prazos, orçamentos e cláusulas de todas as 24 obras.',
+    };
+  }
+
+  // 2. Inspect individual sheet headers for database formats
+  for (const sheetName of sheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+    if (!rows || rows.length === 0) continue;
+
+    const h0 = (rows[0] || []).map((v) => String(v || '').toLowerCase().trim());
+    const h1 = (rows[1] || []).map((v) => String(v || '').toLowerCase().trim());
+
+    // Check PREVISAO DRE OBRAS (Obra | Mês | Conta DRE | Previsto inicial)
+    if (
+      (h0.includes('obra') && h0.includes('mês') && (h0.includes('conta dre') || h0.includes('previsto inicial'))) ||
+      (h1.includes('obra') && h1.includes('mês') && (h1.includes('conta dre') || h1.includes('previsto inicial')))
+    ) {
+      const h = h0.includes('obra') ? h0 : h1;
+      const startRow = h0.includes('obra') ? 2 : 3;
+      return {
+        preset: 'PREVISAO_DRE_OBRAS',
+        mode: 'financial_transactions',
+        sheetName,
+        startRow,
+        projectCol: String(h.indexOf('obra')),
+        dateCol: String(h.indexOf('mês')),
+        dreLineCol: String(h.indexOf('conta dre') !== -1 ? h.indexOf('conta dre') : h.indexOf('conta')),
+        amountCol: String(h.indexOf('previsto inicial') !== -1 ? h.indexOf('previsto inicial') : 3),
+        status: 'previsto_inicial',
+        presetTitle: 'Previsão Inicial DRE por Obra (Banco de Dados)',
+        presetDescription: 'Detecção Automática: Formato tabela com Obra, Mês, Conta DRE e Previsto Inicial.',
+      };
+    }
+
+    // Check RECEITAS MO ADM / Banco_Cobrancas (Obra | Data de cobrança | Medido Piemonte | Categoria)
+    if (
+      (h0.includes('obra') && h0.includes('data de cobrança')) ||
+      (h1.includes('obra') && h1.includes('data de cobrança')) ||
+      sheetName.toLowerCase().includes('cobranca') ||
+      sheetName.toLowerCase().includes('mo_adm')
+    ) {
+      const h = h0.includes('obra') ? h0 : h1;
+      const startRow = h0.includes('obra') ? 2 : 3;
+      const amountIdx = h.indexOf('medido piemonte') !== -1 ? h.indexOf('medido piemonte') : h.indexOf('valor') !== -1 ? h.indexOf('valor') : 2;
+      return {
+        preset: 'RECEITAS_MO_ADM',
+        mode: 'financial_transactions',
+        sheetName,
+        startRow,
+        projectCol: String(h.indexOf('obra') !== -1 ? h.indexOf('obra') : 0),
+        dateCol: String(h.indexOf('data de cobrança') !== -1 ? h.indexOf('data de cobrança') : 1),
+        amountCol: String(amountIdx),
+        dreLineCol: String(h.indexOf('categoria') !== -1 ? h.indexOf('categoria') : 3),
+        status: 'realizado',
+        presetTitle: 'Banco de Cobranças de Equipe / Receitas MO ADM',
+        presetDescription: 'Detecção Automática: Medições e cobranças de mão de obra de equipe por competência.',
+      };
+    }
+
+    // Check RECEITAS TAXA ADM (Projeto | Tipologia | Valor Cobrado | Valor Previsto)
+    if (
+      (h0.includes('projeto') && (h0.includes('valor cobrado') || h0.includes('valor previsto'))) ||
+      sheetName.toLowerCase().includes('banco de dados')
+    ) {
+      const h = h0;
+      return {
+        preset: 'RECEITAS_TAXA_ADM_BD',
+        mode: 'financial_transactions',
+        sheetName,
+        startRow: 2,
+        projectCol: String(h.indexOf('projeto') !== -1 ? h.indexOf('projeto') : 0),
+        dateCol: String(h.indexOf('data') !== -1 ? h.indexOf('data') : 1),
+        dreLineCol: String(h.indexOf('tipologia') !== -1 ? h.indexOf('tipologia') : 1),
+        amountCol: String(h.indexOf('valor cobrado') !== -1 ? h.indexOf('valor cobrado') : 2),
+        status: 'realizado',
+        presetTitle: 'Banco de Dados de Taxas de Administração',
+        presetDescription: 'Detecção Automática: Tabela consolidada de receitas de taxa ADM por obra.',
+      };
+    }
+  }
+
+  return {
+    preset: 'CUSTOM_GENERIC',
+    mode: 'financial_transactions',
+    presetTitle: 'Planilha Genérica Mapeável',
+    presetDescription: 'Selecione o tipo de lista ou matriz horizontal para mapear as colunas.',
+  };
 }
 
 /**
@@ -280,7 +399,7 @@ export function suggestDRELineKey(labelStr: string): DRELineKey | 'ignore' {
 
   if (lower.includes('irpj') || lower.includes('csll') || lower.includes('imposto de renda')) return 'irpj_csll';
   if (lower.includes('permuta')) return 'permuta_taxa_adm';
-  if (lower.includes('taxa de adm') || lower.includes('taxa adm') || lower.includes('receita adm')) return 'receita_taxa_adm';
+  if (lower.includes('taxa de adm') || lower.includes('taxa adm') || lower.includes('receita adm') || lower.includes('receitas adm')) return 'receita_taxa_adm';
   if (lower.includes('mo adm') || lower.includes('mão de obra adm') || lower.includes('equipe adm') || lower.includes('receita mo')) return 'receita_mo_adm';
   if (lower.includes('assistência') && lower.includes('receita')) return 'receita_assistencia';
   if (lower.includes('imposto') || lower.includes('pis') || lower.includes('iss') || lower.includes('cofins') || lower.includes('tributo')) return 'impostos';
@@ -583,12 +702,12 @@ export function processExcelImport(
   dataRows.forEach((row, rowIdx) => {
     if (!row || row.length === 0) return;
 
-    const dateVal = config.mapping.dateCol ? row[parseInt(config.mapping.dateCol, 10)] : null;
-    const amountVal = config.mapping.amountCol ? row[parseInt(config.mapping.amountCol, 10)] : null;
-    const projectVal = config.mapping.projectCol ? row[parseInt(config.mapping.projectCol, 10)] : config.preselectedProject;
-    const statusVal = config.mapping.statusCol ? row[parseInt(config.mapping.statusCol, 10)] : config.preselectedStatus || 'realizado';
-    const dreLineVal = config.mapping.dreLineCol ? row[parseInt(config.mapping.dreLineCol, 10)] : '';
-    const descVal = config.mapping.descriptionCol ? row[parseInt(config.mapping.descriptionCol, 10)] : '';
+    const dateVal = config.mapping.dateCol !== undefined && config.mapping.dateCol !== '' ? row[parseInt(config.mapping.dateCol, 10)] : null;
+    const amountVal = config.mapping.amountCol !== undefined && config.mapping.amountCol !== '' ? row[parseInt(config.mapping.amountCol, 10)] : null;
+    const projectVal = config.mapping.projectCol !== undefined && config.mapping.projectCol !== '' ? row[parseInt(config.mapping.projectCol, 10)] : config.preselectedProject;
+    const statusVal = config.mapping.statusCol !== undefined && config.mapping.statusCol !== '' ? row[parseInt(config.mapping.statusCol, 10)] : config.preselectedStatus || 'realizado';
+    const dreLineVal = config.mapping.dreLineCol !== undefined && config.mapping.dreLineCol !== '' ? row[parseInt(config.mapping.dreLineCol, 10)] : '';
+    const descVal = config.mapping.descriptionCol !== undefined && config.mapping.descriptionCol !== '' ? row[parseInt(config.mapping.descriptionCol, 10)] : '';
 
     if (!amountVal && amountVal !== 0) return;
     const parsedAmount = parseFloat(String(amountVal).replace(/[^0-9.-]+/g, ''));
