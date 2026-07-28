@@ -4,11 +4,14 @@ import { Award, AlertTriangle, Clock, ShieldCheck, DollarSign, Calendar } from '
 
 interface ViabilityDashboardTabProps {
   projects: ProjectContract[];
-  selectedProject: string;
+  selectedProjects: string[];
 }
 
-export const ViabilityDashboardTab: React.FC<ViabilityDashboardTabProps> = ({ projects, selectedProject }) => {
-  const filteredProjects = selectedProject === 'all' ? projects : projects.filter((p) => p.name === selectedProject);
+export const ViabilityDashboardTab: React.FC<ViabilityDashboardTabProps> = ({ projects, selectedProjects }) => {
+  const filteredProjects =
+    selectedProjects.includes('all') || selectedProjects.length === 0
+      ? projects
+      : projects.filter((p) => selectedProjects.includes(p.name));
 
   const formatMoney = (val?: number) => {
     if (val === undefined || val === null) return 'R$ 0,00';

@@ -9,12 +9,18 @@ interface ProjectComparisonTabProps {
   projects: ProjectContract[];
   transactions: DRETransaction[];
   settings: GlobalFinancialSettings;
+  selectedProjects: string[];
 }
 
-export const ProjectComparisonTab: React.FC<ProjectComparisonTabProps> = ({ projects, transactions, settings }) => {
+export const ProjectComparisonTab: React.FC<ProjectComparisonTabProps> = ({ projects, transactions, settings, selectedProjects }) => {
   const comparisonData = useMemo(() => {
-    return projects.map((p) => {
-      const pCols = calculateMonthlyDRE(transactions, projects, settings, p.name, 'all');
+    const targetProjects =
+      selectedProjects.includes('all') || selectedProjects.length === 0
+        ? projects
+        : projects.filter((p) => selectedProjects.includes(p.name));
+
+    return targetProjects.map((p) => {
+      const pCols = calculateMonthlyDRE(transactions, projects, settings, [p.name], 'all');
 
       let totalGrossRev = 0;
       let totalDirectCosts = 0;
@@ -54,7 +60,7 @@ export const ProjectComparisonTab: React.FC<ProjectComparisonTabProps> = ({ proj
         netMarginPct,
       };
     });
-  }, [projects, transactions, settings]);
+  }, [projects, transactions, settings, selectedProjects]);
 
   const formatMoney = (val: number) => {
     return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });

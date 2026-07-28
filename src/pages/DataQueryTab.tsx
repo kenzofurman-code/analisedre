@@ -6,6 +6,7 @@ import { Search, Filter, Trash2, Plus, Tag, FileText, Layers, Info } from 'lucid
 interface DataQueryTabProps {
   transactions: DRETransaction[];
   projects: ProjectContract[];
+  selectedProjects: string[];
   onDeleteTransaction: (id: string) => void;
   onClearAllTransactions: () => void;
   onAddTransaction: (tx: DRETransaction) => void;
@@ -15,6 +16,7 @@ interface DataQueryTabProps {
 export const DataQueryTab: React.FC<DataQueryTabProps> = ({
   transactions,
   projects,
+  selectedProjects,
   onDeleteTransaction,
   onClearAllTransactions,
   onAddTransaction,
@@ -41,6 +43,8 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
   const [editingCellVal, setEditingCellVal] = useState<string>('');
 
   const filtered = transactions.filter((t) => {
+    const isGlobalProj = selectedProjects.includes('all') || selectedProjects.length === 0;
+    if (!isGlobalProj && !selectedProjects.includes(t.project)) return false;
     if (projectFilter !== 'all' && t.project !== projectFilter) return false;
     if (statusFilter !== 'all' && t.status !== statusFilter) return false;
     if (lineFilter !== 'all' && t.dreLineKey !== lineFilter) return false;

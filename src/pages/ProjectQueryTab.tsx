@@ -4,6 +4,7 @@ import { Search, Building2, Trash2, Plus, RefreshCw, Briefcase, Clock, ShieldChe
 
 interface ProjectQueryTabProps {
   projects: ProjectContract[];
+  selectedProjects: string[];
   onDeleteProject: (projectId: string) => void;
   onClearAllProjects: () => void;
   onAddProject: (project: ProjectContract) => void;
@@ -12,6 +13,7 @@ interface ProjectQueryTabProps {
 
 export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
   projects,
+  selectedProjects,
   onDeleteProject,
   onClearAllProjects,
   onAddProject,
@@ -35,6 +37,8 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
   const [newProjecaoTotal, setNewProjecaoTotal] = useState<number>(10000000);
 
   const filtered = projects.filter((p) => {
+    const isGlobal = selectedProjects.includes('all') || selectedProjects.length === 0;
+    if (!isGlobal && !selectedProjects.includes(p.name)) return false;
     if (typeFilter !== 'all' && p.type !== typeFilter) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();

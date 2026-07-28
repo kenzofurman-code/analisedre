@@ -6,10 +6,10 @@ import { DollarSign, TrendingUp, Percent, ChevronLeft, ChevronRight, Calendar, I
 interface DRETimelineTabProps {
   monthlyColumns: MonthlyDREColumn[];
   settings: GlobalFinancialSettings;
-  selectedProject: string;
+  selectedProjects: string[];
 }
 
-export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, settings, selectedProject }) => {
+export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, settings, selectedProjects }) => {
   // Active clicked tooltip state (opens on click)
   const [activeTooltipLineKey, setActiveTooltipLineKey] = useState<string | null>(null);
 
@@ -140,7 +140,13 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
             </p>
             <h3 className="text-xl font-bold text-slate-100 mt-1">{formatMoney(totalReceitaBruta)}</h3>
             <p className="text-[10px] text-slate-500 mt-1">
-              Projeto: <strong className="text-blue-400">{selectedProject === 'all' ? 'Global' : selectedProject}</strong>
+              Projeto: <strong className="text-blue-400">
+                {selectedProjects.includes('all') || selectedProjects.length === 0
+                  ? 'Global (Todos)'
+                  : selectedProjects.length === 1
+                  ? selectedProjects[0]
+                  : `${selectedProjects.length} Selecionados`}
+              </strong>
             </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">

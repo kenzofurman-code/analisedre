@@ -18,7 +18,7 @@ const DATA_VERSION = 'v7.0_consolidated_store_fast';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
-  const [selectedProject, setSelectedProject] = useState<string>('all');
+  const [selectedProjects, setSelectedProjects] = useState<string[]>(['all']);
   const [statusFilter, setStatusFilter] = useState<'all' | 'realizado' | 'projetado' | 'previsto_inicial'>('all');
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(isFirebaseConfigured ? 'synced' : 'offline');
 
@@ -231,8 +231,8 @@ export function App() {
     setTransactions((prev) => prev.map((t) => (t.id === updatedTx.id ? updatedTx : t)));
   };
 
-  // Compute monthly DRE data for timeline and cashflow
-  const monthlyColumns = calculateMonthlyDRE(transactions, projects, settings, selectedProject, statusFilter);
+  // Compute monthly DRE data for timeline and cashflow filtered by selectedProjects
+  const monthlyColumns = calculateMonthlyDRE(transactions, projects, settings, selectedProjects, statusFilter);
 
   const tabTitles: Record<TabType, { title: string; subtitle: string }> = {
     timeline: {
@@ -281,8 +281,8 @@ export function App() {
           title={tabTitles[activeTab].title}
           subtitle={tabTitles[activeTab].subtitle}
           projects={projects}
-          selectedProject={selectedProject}
-          onSelectProject={setSelectedProject}
+          selectedProjects={selectedProjects}
+          onSelectProjects={setSelectedProjects}
           statusFilter={statusFilter}
           onSelectStatusFilter={setStatusFilter}
           syncStatus={syncStatus}
@@ -293,19 +293,19 @@ export function App() {
 
         <main className="flex-1 overflow-y-auto pb-12">
           {activeTab === 'timeline' && (
-            <DRETimelineTab monthlyColumns={monthlyColumns} settings={settings} selectedProject={selectedProject} />
+            <DRETimelineTab monthlyColumns={monthlyColumns} settings={settings} selectedProjects={selectedProjects} />
           )}
 
           {activeTab === 'cashflow' && (
-            <CashFlowTab monthlyColumns={monthlyColumns} selectedProject={selectedProject} />
+            <CashFlowTab monthlyColumns={monthlyColumns} selectedProjects={selectedProjects} />
           )}
 
           {activeTab === 'dashboard' && (
-            <ViabilityDashboardTab projects={projects} selectedProject={selectedProject} />
+            <ViabilityDashboardTab projects={projects} selectedProjects={selectedProjects} />
           )}
 
           {activeTab === 'comparison' && (
-            <ProjectComparisonTab projects={projects} transactions={transactions} settings={settings} />
+            <ProjectComparisonTab projects={projects} transactions={transactions} settings={settings} selectedProjects={selectedProjects} />
           )}
 
           {activeTab === 'import' && (
@@ -319,6 +319,7 @@ export function App() {
           {activeTab === 'projects' && (
             <ProjectQueryTab
               projects={projects}
+              selectedProjects={selectedProjects}
               onDeleteProject={handleDeleteProject}
               onClearAllProjects={handleClearAllProjects}
               onAddProject={handleAddProject}
@@ -330,6 +331,7 @@ export function App() {
             <DataQueryTab
               transactions={transactions}
               projects={projects}
+              selectedProjects={selectedProjects}
               onDeleteTransaction={handleDeleteTransaction}
               onClearAllTransactions={handleClearAllTransactions}
               onAddTransaction={handleAddTransaction}

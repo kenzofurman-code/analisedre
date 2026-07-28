@@ -10,12 +10,14 @@ export function calculateMonthlyDRE(
   transactions: DRETransaction[],
   projects: ProjectContract[],
   settings: GlobalFinancialSettings,
-  selectedProject: string = 'all',
+  selectedProjects: string[] = ['all'],
   statusFilter: 'all' | 'realizado' | 'projetado' | 'previsto_inicial' = 'all'
 ): MonthlyDREColumn[] {
-  // 1. Filter transactions by project and status
+  const isGlobal = selectedProjects.includes('all') || selectedProjects.length === 0;
+
+  // 1. Filter transactions by selected projects array and status
   const filtered = transactions.filter((t) => {
-    if (selectedProject !== 'all' && t.project !== selectedProject) return false;
+    if (!isGlobal && !selectedProjects.includes(t.project)) return false;
 
     if (statusFilter === 'all') {
       if (t.status === 'previsto_inicial') return false; // Viabilidade base is separate
@@ -31,7 +33,11 @@ export function calculateMonthlyDRE(
     if (t.date) monthSet.add(t.date);
   });
 
-  projects.forEach((p) => {
+  const activeProjectsList = isGlobal
+    ? projects
+    : projects.filter((p) => selectedProjects.includes(p.name));
+
+  activeProjectsList.forEach((p) => {
     if (p.startDate) {
       const start = p.startDate.slice(0, 7);
       const end = (p.actualEndDate || p.replannedEndDate || p.baselineEndDate).slice(0, 7);
@@ -130,11 +136,10 @@ export function calculateMonthlyDRE(
       }
     });
 
-    // Team Cost Calculation according to settings.teamCostMode
-    const relevantProjects = selectedProject === 'all' ? projects : projects.filter((p) => p.name === selectedProject);
+    // Team Cost Calculation for active selected projects according to settings.teamCostMode
     let computedTeamCostMonth = 0;
 
-    relevantProjects.forEach((p) => {
+    activeProjectsList.forEach((p) => {
       const start = p.startDate ? p.startDate.slice(0, 7) : '';
       const end = (p.actualEndDate || p.replannedEndDate || p.baselineEndDate || '').slice(0, 7);
       const isWithinTimeline = Boolean(start && end && ym >= start && ym <= end);
@@ -180,21 +185,26 @@ export function calculateMonthlyDRE(
     const globalRevMonth = globalMonthlyRevenue[ym] || 0;
     const globalTotalADM = globalRevMonth * (settings.admExpensePercent / 100);
 
-    if (selectedProject === 'all') {
+    if (isGlobal) {
       values.despesas_adm_pie = grossRevenue * (settings.admExpensePercent / 100);
     } else {
       const activeCount = globalActiveProjectsInMonth[ym]?.size || 1;
-      const projRev = globalProjectRevenue[ym]?.[selectedProject] || 0;
+      let totalAllocatedADM = 0;
 
-      if (settings.admAllocationMode === 'receita') {
-        if (globalRevMonth > 0) {
-          values.despesas_adm_pie = globalTotalADM * (projRev / globalRevMonth);
+      activeProjectsList.forEach((p) => {
+        const projRev = globalProjectRevenue[ym]?.[p.name] || 0;
+        if (settings.admAllocationMode === 'receita') {
+          if (globalRevMonth > 0) {
+            totalAllocatedADM += globalTotalADM * (projRev / globalRevMonth);
+          } else {
+            totalAllocatedADM += globalTotalADM / Math.max(1, activeCount);
+          }
         } else {
-          values.despesas_adm_pie = globalTotalADM / Math.max(1, activeCount);
+          totalAllocatedADM += globalTotalADM / Math.max(1, activeCount);
         }
-      } else {
-        values.despesas_adm_pie = globalTotalADM / Math.max(1, activeCount);
-      }
+      });
+
+      values.despesas_adm_pie = totalAllocatedADM;
     }
 
     const totalDirectExpensesCosts =

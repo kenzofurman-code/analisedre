@@ -15,10 +15,10 @@ import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp } from 'lucide-react';
 
 interface CashFlowTabProps {
   monthlyColumns: MonthlyDREColumn[];
-  selectedProject: string;
+  selectedProjects: string[];
 }
 
-export const CashFlowTab: React.FC<CashFlowTabProps> = ({ monthlyColumns, selectedProject }) => {
+export const CashFlowTab: React.FC<CashFlowTabProps> = ({ monthlyColumns, selectedProjects }) => {
   const activeColumns = useMemo(() => {
     if (monthlyColumns.length === 0) return [];
 
@@ -134,7 +134,13 @@ export const CashFlowTab: React.FC<CashFlowTabProps> = ({ monthlyColumns, select
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Saldo Acumulado Final</p>
             <h3 className="text-xl font-bold text-indigo-400 mt-1">{formatMoney(finalCumulativeBalance)}</h3>
             <p className="text-[10px] text-slate-500 mt-1">
-              Projeto: <strong className="text-blue-400">{selectedProject === 'all' ? 'Global' : selectedProject}</strong>
+              Projeto: <strong className="text-blue-400">
+                {selectedProjects.includes('all') || selectedProjects.length === 0
+                  ? 'Global'
+                  : selectedProjects.length === 1
+                  ? selectedProjects[0]
+                  : `${selectedProjects.length} Selecionados`}
+              </strong>
             </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
