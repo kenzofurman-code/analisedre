@@ -209,9 +209,9 @@ export function calculateMonthlyDRE(
 
     values.resultado = values.margem_bruta_val - values.despesas_adm_pie;
 
-    // FALLBACK FORMULA 2: IRPJ + CSLL
-    if (values.irpj_csll === 0 && values.resultado > 0) {
-      values.irpj_csll = values.resultado * (settings.irpjCsllPercent / 100);
+    // FALLBACK FORMULA 2: IRPJ + CSLL calculados sobre Todas as Receitas (Receita Bruta Total)
+    if (values.irpj_csll === 0 && grossRevenue > 0) {
+      values.irpj_csll = grossRevenue * (settings.irpjCsllPercent / 100);
     }
 
     values.resultado_final = values.resultado - values.irpj_csll;

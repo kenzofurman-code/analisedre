@@ -104,7 +104,7 @@ export const DRE_LINE_DEFINITIONS: DRELineDefinition[] = [
     category: 'CALCULATED',
     isCalculated: true,
     sourceOriginInfo: 'Impostos sobre o Lucro Operacional',
-    formulaInfo: 'Fórmula: RESULTADO × 10,88% a 15,00% (quando RESULTADO > 0)',
+    formulaInfo: 'Fórmula: Receita Bruta Total × Alíquota de IRPJ/CSLL (ex: 15,00%)',
   },
   {
     key: 'resultado_final',
