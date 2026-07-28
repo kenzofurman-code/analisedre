@@ -9,12 +9,12 @@ import { ImportTab } from './pages/ImportTab';
 import { DataQueryTab } from './pages/DataQueryTab';
 import { ProjectQueryTab } from './pages/ProjectQueryTab';
 import { DRETransaction, GlobalFinancialSettings, ProjectContract, SyncStatus } from './types/dre';
-import { INITIAL_PROJECTS, INITIAL_SETTINGS, generateInitialTransactions } from './services/initialData';
+import { INITIAL_PROJECTS, INITIAL_SETTINGS } from './services/initialData';
 import { calculateMonthlyDRE } from './services/dreCalculator';
 import { storageService, isFirebaseConfigured } from './services/firebaseConfig';
 import { generateEstouroTransactions, generateEstimatedTeamCostTransactions } from './utils/excelParser';
 
-const DATA_VERSION = 'v5.0_estimated_team_cost_generated';
+const DATA_VERSION = 'v6.0_pure_real_excel_data';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
@@ -37,15 +37,15 @@ export function App() {
     const saved = localStorage.getItem('dre_transactions');
 
     if (savedVersion === DATA_VERSION && saved) {
-      return JSON.parse(saved);
+      const parsed: DRETransaction[] = JSON.parse(saved);
+      return parsed.filter((t) => !t.id.startsWith('seed-'));
     }
 
     localStorage.setItem('dre_data_version', DATA_VERSION);
-    const initial = generateInitialTransactions();
     const initialEstouro = generateEstouroTransactions(INITIAL_PROJECTS);
     const initialEstimatedTeam = generateEstimatedTeamCostTransactions(INITIAL_PROJECTS);
 
-    const merged = [...initialEstouro, ...initialEstimatedTeam, ...initial];
+    const merged = [...initialEstouro, ...initialEstimatedTeam];
     localStorage.setItem('dre_transactions', JSON.stringify(merged));
     return merged;
   });
@@ -65,7 +65,9 @@ export function App() {
 
     const unsubscribeTransactions = storageService.subscribeTransactions((remoteTxs) => {
       if (remoteTxs && remoteTxs.length > 0) {
-        setTransactions(remoteTxs);
+        // Filter out legacy seed transactions
+        const cleanTxs = remoteTxs.filter((t) => !t.id.startsWith('seed-'));
+        setTransactions(cleanTxs);
         setSyncStatus('synced');
       }
     });
@@ -117,7 +119,13 @@ export function App() {
   };
 
   const handleImportComplete = (newTxs: DRETransaction[]) => {
-    setTransactions((prev) => [...newTxs, ...prev]);
+    setTransactions((prev) => {
+      const cleanPrev = prev.filter((t) => !t.id.startsWith('seed-'));
+      const map = new Map<string, DRETransaction>();
+      cleanPrev.forEach((t) => map.set(t.id, t));
+      newTxs.forEach((t) => map.set(t.id, t));
+      return Array.from(map.values());
+    });
     setActiveTab('query');
   };
 
@@ -138,7 +146,7 @@ export function App() {
 
       setTransactions((prevTxs) => {
         const filteredTxs = prevTxs.filter(
-          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-')
+          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-') && !t.id.startsWith('seed-')
         );
         return [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
       });
@@ -165,7 +173,7 @@ export function App() {
       const estimatedTeamTxs = generateEstimatedTeamCostTransactions(INITIAL_PROJECTS);
       setTransactions((prevTxs) => {
         const filteredTxs = prevTxs.filter(
-          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-')
+          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-') && !t.id.startsWith('seed-')
         );
         return [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
       });
@@ -179,7 +187,7 @@ export function App() {
       const estimatedTeamTxs = generateEstimatedTeamCostTransactions(updated);
       setTransactions((prevTxs) => {
         const filteredTxs = prevTxs.filter(
-          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-')
+          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-') && !t.id.startsWith('seed-')
         );
         return [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
       });
