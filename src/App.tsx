@@ -69,8 +69,27 @@ export function App() {
         setProjects(remote.projects);
       }
       if (remote.transactions !== undefined) {
-        const cleanTxs = (remote.transactions || []).filter((t: any) => !t.id.startsWith('seed-'));
+        // Purge ALL residual estimated team cost transactions from old imports
+        // These will be regenerated fresh from the current project list
+        const cleanTxs = (remote.transactions || []).filter((t: any) =>
+          !t.id.startsWith('seed-') &&
+          !(
+            t.dreLineKey === 'custos_equipe' &&
+            (t.id.startsWith('est-team-') || t.sourceSheet === 'Prazo Obras' || t.sourceFile === 'INFORMAÇÕES_PROJETOS.xlsx')
+          )
+        );
         setTransactions(cleanTxs);
+
+        // Regenerate fresh estimated team costs from projects in Firebase
+        if (remote.projects && remote.projects.length > 0) {
+          const freshTeamTxs = generateEstimatedTeamCostTransactions(remote.projects);
+          setTransactions((prev) => {
+            const map = new Map<string, any>();
+            prev.forEach((t) => map.set(t.id, t));
+            freshTeamTxs.forEach((t) => map.set(t.id, t));
+            return Array.from(map.values());
+          });
+        }
       }
       if (remote.settings && Object.keys(remote.settings).length > 0) {
         setSettings((prev) => ({ ...prev, ...remote.settings }));
