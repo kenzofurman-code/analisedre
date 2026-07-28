@@ -126,7 +126,7 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
   };
 
   const parseNum = (val: any) => {
-    if (val === undefined || val === null || val === 'N/A') return 0;
+    if (val === undefined || val === null || val === 'N/A' || val === '') return 0;
     const n = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.-]+/g, ''));
     return isNaN(n) ? 0 : n;
   };
@@ -143,8 +143,16 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
     const replannedEnd = formatExcelDateStr(r[4] || r[2], baselineEnd);
     const actualEnd = r[5] ? formatExcelDateStr(r[5]) : undefined;
 
-    const initialMonths = parseNum(r[3]) || 24;
-    const realMonths = parseNum(r[10]) || initialMonths;
+    const mesInicial = parseNum(r[3]) || 24;
+    const mesCvco = parseNum(r[4]);
+    const mesEntregaUnidades = parseNum(r[6]);
+    const maxMonths = Math.max(mesInicial, mesCvco, mesEntregaUnidades);
+
+    const custoEquipeMensal = parseNum(r[9]);
+    const prazoOrcamentoStr = r[10] ? String(r[10]).trim() : String(mesInicial);
+    const custoOrcamentoEquipe = parseNum(r[11]);
+    const pagamentoMultaVal = parseNum(r[13]);
+    const riscoMultaVal = parseNum(r[17]);
 
     projectsMap[name] = {
       id: `proj-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
@@ -154,13 +162,22 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
       baselineEndDate: baselineEnd,
       replannedEndDate: replannedEnd,
       actualEndDate: actualEnd,
-      initialMonths,
-      realMonths,
-      contractValue: parseNum(r[18]),
-      contractNotes: r[16] ? String(r[16]).trim() : undefined,
-      multaPercent: parseNum(r[17]),
-      valorMulta: parseNum(r[20]),
-      estimatedMonthlyTeamCost: 28000,
+      initialMonths: mesInicial,
+      realMonths: maxMonths,
+      contractValue: parseNum(r[16]) || parseNum(r[18]),
+      contractNotes: r[14] ? String(r[14]).trim() : undefined,
+      multaPercent: parseNum(r[15]),
+      valorMulta: riscoMultaVal,
+      estimatedMonthlyTeamCost: custoEquipeMensal || 28000,
+      mesInicial,
+      mesCvco,
+      mesEntregaUnidades,
+      diasAtraso: parseNum(r[8]),
+      custoEquipeMensal,
+      prazoOrcamentoStr,
+      custoOrcamentoEquipe,
+      pagamentoMultaVal,
+      riscoMultaVal,
     };
   }
 

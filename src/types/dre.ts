@@ -76,6 +76,17 @@ export interface ProjectContract {
   multaPercent?: number;
   valorMulta?: number;
   clausulaCusto?: string;
+
+  // Rich Prazo Obras columns
+  mesInicial?: number; // Col D
+  mesCvco?: number; // Col E
+  mesEntregaUnidades?: number; // Col G
+  diasAtraso?: number; // Col I
+  custoEquipeMensal?: number; // Col J
+  prazoOrcamentoStr?: string; // Col K
+  custoOrcamentoEquipe?: number; // Col L
+  pagamentoMultaVal?: number; // Col N
+  riscoMultaVal?: number; // Col R
 }
 
 export type TeamCostMode = 'real' | 'estimado';

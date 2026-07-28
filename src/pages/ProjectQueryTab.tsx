@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ProjectContract } from '../types/dre';
-import { Search, Building2, Trash2, Plus, RefreshCw, Briefcase, Clock, FileText, AlertTriangle } from 'lucide-react';
+import { Search, Building2, Trash2, Plus, RefreshCw, Briefcase, Clock, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 interface ProjectQueryTabProps {
   projects: ProjectContract[];
@@ -83,24 +83,20 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
     setNewName('');
   };
 
-  // Helper Renderer for 4 Specific Cost Lines requested by user
+  // Helper Renderer for 4 Specific Cost Lines
   const render4CostLines = (p: ProjectContract) => {
-    // Line 1: Orçamento Raso (Reajustado vs Projeção Atual)
     const baseRaso = p.orcamentoRasoReajustado || 0;
     const projRaso = p.projecaoRasoAtual !== undefined ? p.projecaoRasoAtual : baseRaso;
     const hasRasoDiff = baseRaso > 0 && Math.abs(projRaso - baseRaso) > 0.01;
     const isRasoIncrease = projRaso > baseRaso;
 
-    // Line 2: Resultado Raso
     const resultRaso = p.resultadoRasoAtual !== undefined ? p.resultadoRasoAtual : (baseRaso - projRaso);
 
-    // Line 3: Custo Total (Reajustado vs Projeção Total)
     const baseTotal = p.orcamentoTotalReajustado || p.contractValue || 0;
     const projTotal = p.projectedCostAtCompletion !== undefined ? p.projectedCostAtCompletion : baseTotal;
     const hasTotalDiff = baseTotal > 0 && Math.abs(projTotal - baseTotal) > 0.01;
     const isTotalIncrease = projTotal > baseTotal;
 
-    // Line 4: Resultado Total
     const resultTotal = p.resultAtCompletion !== undefined ? p.resultAtCompletion : (baseTotal - projTotal);
 
     return (
@@ -158,6 +154,103 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
             {formatMoney(resultTotal)}
           </span>
         </div>
+      </div>
+    );
+  };
+
+  // Helper Renderer for Deadline & Team Cost Analysis (4 Lines + Penalty Alert)
+  const renderDeadlineAndTeamCostSection = (p: ProjectContract) => {
+    const mesInicial = p.mesInicial || p.initialMonths || 24;
+    const mesCvco = p.mesCvco || 0;
+    const mesEntrega = p.mesEntregaUnidades || 0;
+    const maxDurationMonths = Math.max(mesInicial, mesCvco, mesEntrega);
+
+    const hasDurationDiff = maxDurationMonths > mesInicial;
+
+    const custoMensal = p.custoEquipeMensal || p.estimatedMonthlyTeamCost || 28000;
+    const prazoOrcStr = p.prazoOrcamentoStr || `${mesInicial}`;
+    const prazoOrcNum = parseFloat(prazoOrcStr.split('/')[0]) || mesInicial;
+    const custoOrcEquipe = p.custoOrcamentoEquipe || (prazoOrcNum * custoMensal);
+
+    const custoEstEquipe = maxDurationMonths * custoMensal;
+    const varCustoEquipe = custoEstEquipe - custoOrcEquipe;
+    const isEquipeIncrease = varCustoEquipe > 0.01;
+
+    const riscoMulta = p.riscoMultaVal || p.valorMulta || 0;
+
+    return (
+      <div className="space-y-3 pt-3 border-t border-slate-800">
+        <div className="flex items-center space-x-2 text-xs font-bold text-indigo-400 uppercase tracking-wider">
+          <Clock className="w-4 h-4 text-indigo-400" />
+          <span>Análise de Prazos & Custo de Equipe</span>
+        </div>
+
+        <div className="space-y-2 text-[11px] bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+          {/* Linha 1: Duração do Projeto */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <span className="text-slate-400 font-semibold">1. Duração do projeto:</span>
+            <div className="font-mono font-bold flex items-center space-x-1.5">
+              <span className="text-slate-300">{mesInicial} meses</span>
+              {hasDurationDiff && (
+                <>
+                  <span className="text-slate-500">➡️</span>
+                  <span className="text-amber-400">{maxDurationMonths} meses</span>
+                  <span title="Atraso na duração total do projeto">🔺</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Linha 2: Custo Equipe Orçamento */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pt-1 border-t border-slate-800/60">
+            <span className="text-slate-400 font-semibold">2. Custo equipe orçamento:</span>
+            <div className="font-mono font-bold flex items-center space-x-1 text-slate-300 text-[10.5px]">
+              <span>{prazoOrcStr}m</span>
+              <span className="text-slate-500">➡️</span>
+              <span>{formatMoney(custoMensal)}/m</span>
+              <span className="text-slate-500">➡️</span>
+              <span className="text-slate-200">{formatMoney(custoOrcEquipe)}</span>
+            </div>
+          </div>
+
+          {/* Linha 3: Custo Estimado */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pt-1 border-t border-slate-800/60">
+            <span className="text-slate-400 font-semibold">3. Custo estimado:</span>
+            <div className="font-mono font-bold flex items-center space-x-1 text-amber-300 text-[10.5px]">
+              <span>{maxDurationMonths}m</span>
+              <span className="text-slate-500">➡️</span>
+              <span>{formatMoney(custoMensal)}/m</span>
+              <span className="text-slate-500">➡️</span>
+              <span>{formatMoney(custoEstEquipe)}</span>
+            </div>
+          </div>
+
+          {/* Linha 4: Variação Custo Equipe */}
+          <div className="flex justify-between items-center pt-1 border-t border-slate-800/60">
+            <span className="text-slate-400 font-semibold">4. Variação custo equipe:</span>
+            <div className="font-mono font-bold flex items-center space-x-1">
+              <span className={isEquipeIncrease ? 'text-rose-400' : 'text-emerald-400'}>
+                {varCustoEquipe >= 0 ? `+${formatMoney(varCustoEquipe)}` : formatMoney(varCustoEquipe)}
+              </span>
+              {Math.abs(varCustoEquipe) > 0.01 && (
+                <span>{isEquipeIncrease ? '🔺' : '🔻'}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Resumo de Multa */}
+        {riscoMulta > 0 ? (
+          <div className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-500/40 p-2.5 rounded-xl flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+            <span><strong>Risco de multa no valor de {formatMoney(riscoMulta)}</strong></span>
+          </div>
+        ) : (
+          <div className="text-[11px] text-blue-300 bg-blue-950/40 border border-blue-500/40 p-2.5 rounded-xl flex items-center space-x-2">
+            <ShieldCheck className="w-4 h-4 text-blue-400 flex-shrink-0" />
+            <span>Acordo feito sem pagamento de multa de prazo</span>
+          </div>
+        )}
       </div>
     );
   };
@@ -308,6 +401,9 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
                   💡 <strong>Cláusula Custo:</strong> "{p.clausulaCusto}"
                 </div>
               )}
+
+              {/* DEADLINE & TEAM COST ANALYSIS SECTION */}
+              {renderDeadlineAndTeamCostSection(p)}
             </div>
           ))}
         </div>
