@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
-import { DRELineKey, DRETransaction, ExcelImportConfig, ProjectContract, TransactionStatus } from '../types/dre';
+import { DRELineKey, DRETransaction, ExcelImportConfig, ProjectContract, SpreadsheetPreset, TransactionStatus } from '../types/dre';
+
+export type { SpreadsheetPreset } from '../types/dre';
 
 export interface ParsedSheetPreview {
   sheetName: string;
@@ -7,21 +9,6 @@ export interface ParsedSheetPreview {
   totalCols: number;
   previewRows: any[][];
   headers: { index: number; colLetter: string; sampleVal: string }[];
-}
-
-export interface SpreadsheetPreset {
-  preset: 'INFORMAÇÕES_PROJETOS' | 'PREVISAO_DRE_OBRAS' | 'RECEITAS_MO_ADM' | 'RECEITAS_TAXA_ADM_BD' | 'CUSTOM_GENERIC';
-  mode: 'projects_register' | 'financial_transactions';
-  sheetName?: string;
-  startRow?: number;
-  projectCol?: string;
-  dateCol?: string;
-  dreLineCol?: string;
-  amountCol?: string;
-  status?: TransactionStatus;
-  presetTitle?: string;
-  presetDescription?: string;
-  isMultiSheetTaxaAdm?: boolean;
 }
 
 export function parseExcelFileSheets(fileBuffer: ArrayBuffer): { sheetNames: string[]; workbook: XLSX.WorkBook } {
@@ -113,14 +100,11 @@ export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: strin
     }
 
     let month = 1;
-    // If p2 is 1 (day 1 of month in US M/D/YY from Excel formatting), p1 is the Month! (e.g. 3/1/26 = March, 4/1/26 = April)
     if (p2 === 1 && p1 <= 12) {
       month = p1;
     } else if (p1 > 12 && p2 <= 12) {
-      // BR DD/MM/YYYY where day > 12 (e.g. 25/03/2024 -> month 3)
       month = p2;
     } else if (p2 <= 12) {
-      // Standard BR DD/MM/YYYY (Day / Month / Year)
       month = p2;
     } else if (p1 <= 12) {
       month = p1;
@@ -150,7 +134,26 @@ export function detectSpreadsheetPreset(workbook: XLSX.WorkBook): SpreadsheetPre
     };
   }
 
-  // 2. Inspect individual sheet headers for database formats
+  // 2. Check Custo de MO POR PROJETO (Sheet 'Custo de equipe' or 'Planilha1' with DESCRICAO_PROJETO)
+  const custoEquipeSheet = sheetNames.find((s) => s.toLowerCase().includes('custo de equipe') || s.toLowerCase().includes('equipe'));
+  if (custoEquipeSheet || (sheetNames.includes('Planilha1') && sheetNames.some((s) => s.toLowerCase().includes('custo')))) {
+    const targetSheet = custoEquipeSheet || sheetNames.find((s) => s.toLowerCase().includes('custo')) || sheetNames[0];
+    return {
+      preset: 'CUSTO_MO_POR_PROJETO',
+      mode: 'financial_transactions',
+      sheetName: targetSheet,
+      startRow: 5,
+      projectCol: '0',
+      dateCol: '2',
+      dreLineCol: '0',
+      amountCol: '4',
+      status: 'realizado',
+      presetTitle: 'Custo Real de Mão de Obra de Equipe (Custo de MO POR PROJETO.xlsx)',
+      presetDescription: 'Detecção Automática: Relatório resumido de custos de equipe por projeto, ano e mês.',
+    };
+  }
+
+  // 3. Inspect individual sheet headers for database formats
   for (const sheetName of sheetNames) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) continue;
@@ -372,43 +375,63 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
 }
 
 /**
- * Generate Estouro Contratada Transactions for Last Month of Projects
+ * Dedicated Parser for Custo de MO POR PROJETO.xlsx
  */
-export function generateEstouroTransactions(
-  projects: ProjectContract[],
+export function parseCustoMoPorProjeto(
+  workbook: XLSX.WorkBook,
+  fileName: string = 'Custo de MO POR PROJETO.xlsx',
   currentDateStr: string = new Date().toISOString().slice(0, 7)
 ): DRETransaction[] {
+  const sheetName = workbook.SheetNames.find((s) => s.toLowerCase().includes('custo de equipe') || s.toLowerCase().includes('equipe')) || workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+
+  const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
+  if (rawData.length < 5) return [];
+
   const transactions: DRETransaction[] = [];
 
-  projects.forEach((p) => {
-    if (p.estouroContratada && Math.abs(p.estouroContratada) > 0) {
-      const endRaw = p.actualEndDate || p.replannedEndDate || p.baselineEndDate || '2025-12-01';
-      const parsed = parseExcelDateYM(endRaw);
-      const lastMonthStr = parsed.ym;
+  for (let i = 4; i < rawData.length; i++) {
+    const r = rawData[i];
+    if (!r || !r[0]) continue;
+
+    const projName = String(r[0]).trim();
+    if (projName.toLowerCase().includes('total') || projName.toLowerCase().includes('resultado')) continue;
+
+    const yearStr = r[1] ? String(r[1]).trim() : '2024';
+    const monthStr = r[2] ? String(r[2]).trim() : 'jan';
+    const amountVal = r[4] !== undefined ? r[4] : r[3];
+
+    if (amountVal === undefined || amountVal === null) continue;
+    const parsedAmount = Math.abs(parseFloat(String(amountVal).replace(/[^0-9.-]+/g, '')) || 0);
+
+    if (parsedAmount > 0) {
+      const yearNum = parseInt(yearStr, 10) || 2024;
+      const parsedM = parseExcelDateYM(monthStr, yearNum);
+      const formattedDate = `${yearNum}-${String(parsedM.month).padStart(2, '0')}`;
 
       let finalStatus: TransactionStatus = 'realizado';
       let isAutoForecast = false;
-
-      if (lastMonthStr > currentDateStr) {
+      if (formattedDate > currentDateStr) {
         finalStatus = 'projetado';
         isAutoForecast = true;
       }
 
       transactions.push({
-        id: `estouro-${p.id || p.name.toLowerCase()}-${lastMonthStr}`,
-        project: p.name,
-        date: lastMonthStr,
-        dreLineKey: 'estouro_contratada',
-        amount: Math.abs(p.estouroContratada),
+        id: `custo-mo-${projName}-${formattedDate}-${i}`,
+        project: projName,
+        date: formattedDate,
+        dreLineKey: 'custos_equipe',
+        amount: parsedAmount,
         status: finalStatus,
         isAutoForecast,
-        description: `Estouro de Custo Suportado pela Contratada no Término (${p.name})`,
-        sourceFile: 'INFORMAÇÕES_PROJETOS.xlsx',
-        sourceSheet: 'Custo Obras',
+        description: `Custo Real de MO de Equipe (${projName})`,
+        sourceFile: fileName,
+        sourceSheet: sheetName,
         createdAt: new Date().toISOString(),
       });
     }
-  });
+  }
 
   return transactions;
 }
@@ -470,6 +493,48 @@ export function parseMultiSheetReceitasTaxaAdm(
           createdAt: new Date().toISOString(),
         });
       }
+    }
+  });
+
+  return transactions;
+}
+
+/**
+ * Generate Estouro Contratada Transactions for Last Month of Projects
+ */
+export function generateEstouroTransactions(
+  projects: ProjectContract[],
+  currentDateStr: string = new Date().toISOString().slice(0, 7)
+): DRETransaction[] {
+  const transactions: DRETransaction[] = [];
+
+  projects.forEach((p) => {
+    if (p.estouroContratada && Math.abs(p.estouroContratada) > 0) {
+      const endRaw = p.actualEndDate || p.replannedEndDate || p.baselineEndDate || '2025-12-01';
+      const parsed = parseExcelDateYM(endRaw);
+      const lastMonthStr = parsed.ym;
+
+      let finalStatus: TransactionStatus = 'realizado';
+      let isAutoForecast = false;
+
+      if (lastMonthStr > currentDateStr) {
+        finalStatus = 'projetado';
+        isAutoForecast = true;
+      }
+
+      transactions.push({
+        id: `estouro-${p.id || p.name.toLowerCase()}-${lastMonthStr}`,
+        project: p.name,
+        date: lastMonthStr,
+        dreLineKey: 'estouro_contratada',
+        amount: Math.abs(p.estouroContratada),
+        status: finalStatus,
+        isAutoForecast,
+        description: `Estouro de Custo Suportado pela Contratada no Término (${p.name})`,
+        sourceFile: 'INFORMAÇÕES_PROJETOS.xlsx',
+        sourceSheet: 'Custo Obras',
+        createdAt: new Date().toISOString(),
+      });
     }
   });
 
@@ -592,7 +657,13 @@ export function processExcelImport(
   config: ExcelImportConfig,
   currentDateStr: string = new Date().toISOString().slice(0, 7)
 ): DRETransaction[] {
-  // Check if RECEITAS TAXA ADM multi-sheet file (legacy) vs database sheet ('Banco de Dados')
+  // 1. Check if Custo de MO POR PROJETO.xlsx
+  const isCustoMoSheet = workbook.SheetNames.some((s) => s.toLowerCase().includes('custo de equipe') || s.toLowerCase().includes('equipe')) || config.fileName.toLowerCase().includes('custo de mo');
+  if (isCustoMoSheet) {
+    return parseCustoMoPorProjeto(workbook, config.fileName, currentDateStr);
+  }
+
+  // 2. Check if RECEITAS TAXA ADM multi-sheet file (legacy)
   const isMultiSheetTaxaAdm = config.isMultiSheetTaxaAdm || (workbook.SheetNames.includes('Unna') && workbook.SheetNames.includes('Qoya') && !workbook.SheetNames.includes('Banco de Dados'));
   if (isMultiSheetTaxaAdm) {
     return parseMultiSheetReceitasTaxaAdm(workbook, config.fileName, currentDateStr);

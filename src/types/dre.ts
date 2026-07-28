@@ -130,6 +130,21 @@ export interface ExcelImportConfig {
   isMultiSheetTaxaAdm?: boolean;
 }
 
+export interface SpreadsheetPreset {
+  preset: 'INFORMAÇÕES_PROJETOS' | 'PREVISAO_DRE_OBRAS' | 'RECEITAS_MO_ADM' | 'RECEITAS_TAXA_ADM_BD' | 'CUSTO_MO_POR_PROJETO' | 'CUSTOM_GENERIC';
+  mode: 'projects_register' | 'financial_transactions';
+  sheetName?: string;
+  startRow?: number;
+  projectCol?: string;
+  dateCol?: string;
+  dreLineCol?: string;
+  amountCol?: string;
+  status?: TransactionStatus;
+  presetTitle?: string;
+  presetDescription?: string;
+  isMultiSheetTaxaAdm?: boolean;
+}
+
 export interface MonthlyDREColumn {
   yearMonth: string;
   displayLabel: string;
