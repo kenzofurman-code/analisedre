@@ -13,95 +13,61 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
   // Active clicked tooltip state (opens on click)
   const [activeTooltipLineKey, setActiveTooltipLineKey] = useState<string | null>(null);
 
-  // Extract all unique years available in dataset
+  // Default view mode: "Todos os Anos" ('all')
+  const [viewMode, setViewMode] = useState<'year' | 'all'>('all');
+
+  // Filter out months that have no financial movement at all (grossRev === 0 && costs === 0)
+  const activeMonthlyColumns = useMemo(() => {
+    return monthlyColumns.filter((col) => {
+      const grossRev =
+        col.values.receita_taxa_adm +
+        col.values.permuta_taxa_adm +
+        col.values.receita_mo_adm +
+        col.values.receita_assistencia;
+      const costs =
+        col.values.custos_equipe +
+        col.values.custos_deslocamento +
+        col.values.estouro_contratada +
+        col.values.impostos +
+        col.values.despesa_assistencia;
+      return grossRev > 0 || costs > 0;
+    });
+  }, [monthlyColumns]);
+
+  // Extract all unique years available in active dataset
   const availableYears = useMemo(() => {
     const years = new Set<string>();
-    monthlyColumns.forEach((col) => {
+    activeMonthlyColumns.forEach((col) => {
       if (col.yearMonth) {
         const y = col.yearMonth.slice(0, 4);
         years.add(y);
       }
     });
     return Array.from(years).sort();
-  }, [monthlyColumns]);
+  }, [activeMonthlyColumns]);
 
-  // Find first year with non-zero financial movement for the selected project
+  // Find first year with non-zero financial movement
   const initialYear = useMemo(() => {
-    const colWithMovement = monthlyColumns.find((col) => {
-      const grossRev =
-        col.values.receita_taxa_adm +
-        col.values.permuta_taxa_adm +
-        col.values.receita_mo_adm +
-        col.values.receita_assistencia;
-      const costs = col.values.custos_equipe + col.values.custos_deslocamento + col.values.estouro_contratada;
-      return grossRev > 0 || costs > 0;
-    });
-
-    if (colWithMovement) {
-      return colWithMovement.yearMonth.slice(0, 4);
+    if (activeMonthlyColumns.length > 0) {
+      return activeMonthlyColumns[0].yearMonth.slice(0, 4);
     }
     return availableYears[0] || '2024';
-  }, [monthlyColumns, availableYears, selectedProject]);
+  }, [activeMonthlyColumns, availableYears]);
 
   const [selectedYear, setSelectedYear] = useState<string>(initialYear);
-  const [viewMode, setViewMode] = useState<'year' | 'all'>('year');
 
-  // Reset selected year when selected project changes
+  // Reset selected year when initialYear changes
   useMemo(() => {
     setSelectedYear(initialYear);
   }, [initialYear]);
 
-  // Filter columns for 12 months of the selected year
+  // Filter display columns based on viewMode ('all' vs 'year')
   const displayColumns = useMemo(() => {
-    if (viewMode === 'all') return monthlyColumns;
-
-    const filtered = monthlyColumns.filter((col) => col.yearMonth.startsWith(selectedYear));
-
-    if (filtered.length < 12) {
-      const fullYearCols: MonthlyDREColumn[] = [];
-      const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-      const currentDateStr = new Date().toISOString().slice(0, 7);
-
-      for (let m = 1; m <= 12; m++) {
-        const ym = `${selectedYear}-${String(m).padStart(2, '0')}`;
-        const existing = monthlyColumns.find((c) => c.yearMonth === ym);
-
-        if (existing) {
-          fullYearCols.push(existing);
-        } else {
-          fullYearCols.push({
-            yearMonth: ym,
-            displayLabel: `${monthNames[m - 1]}/${selectedYear.slice(2)}`,
-            isFuture: ym > currentDateStr,
-            values: {
-              receita_taxa_adm: 0,
-              permuta_taxa_adm: 0,
-              receita_mo_adm: 0,
-              receita_assistencia: 0,
-              impostos: 0,
-              despesa_assistencia: 0,
-              custos_equipe: 0,
-              custos_deslocamento: 0,
-              estouro_contratada: 0,
-              margem_bruta_val: 0,
-              margem_bruta_pct: 0,
-              despesas_adm_pie: 0,
-              resultado: 0,
-              irpj_csll: 0,
-              resultado_final: 0,
-              margem_liquida_pct: 0,
-              receita_liquida: 0,
-              curva_fisica_obra: 0,
-              receitas_menos_impostos: 0,
-            },
-          });
-        }
-      }
-      return fullYearCols;
+    if (viewMode === 'all') {
+      return activeMonthlyColumns;
     }
-
-    return filtered;
-  }, [monthlyColumns, selectedYear, viewMode]);
+    return activeMonthlyColumns.filter((col) => col.yearMonth.startsWith(selectedYear));
+  }, [activeMonthlyColumns, selectedYear, viewMode]);
 
   // Totals calculation
   const totalReceitaBruta = displayColumns.reduce(
@@ -153,7 +119,9 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="glass-panel p-5 rounded-2xl flex items-center justify-between border-l-4 border-l-blue-500">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Receita Bruta Total ({selectedYear})</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Receita Bruta Total {viewMode === 'year' ? `(${selectedYear})` : '(Período Ativo)'}
+            </p>
             <h3 className="text-xl font-bold text-slate-100 mt-1">{formatMoney(totalReceitaBruta)}</h3>
             <p className="text-[10px] text-slate-500 mt-1">
               Projeto: <strong className="text-blue-400">{selectedProject === 'all' ? 'Global' : selectedProject}</strong>
@@ -166,7 +134,9 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
 
         <div className="glass-panel p-5 rounded-2xl flex items-center justify-between border-l-4 border-l-emerald-500">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Margem Bruta ({selectedYear})</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Margem Bruta {viewMode === 'year' ? `(${selectedYear})` : '(Período Ativo)'}
+            </p>
             <h3 className="text-xl font-bold text-emerald-400 mt-1">{formatMoney(totalMargemBruta)}</h3>
             <p className="text-[10px] text-slate-500 mt-1">
               Modo Custo Equipe: <strong className="text-emerald-400 uppercase">{settings.teamCostMode}</strong>
@@ -209,9 +179,9 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
             <Calendar className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-100">Slicer de Tempo por Projeto</h3>
+            <h3 className="text-base font-bold text-slate-100">Visão Temporal do DRE ({displayColumns.length} Meses Ativos)</h3>
             <p className="text-xs text-slate-400">
-              Primeiro movimento: <strong className="text-blue-400">{initialYear}</strong> (Clique em qualquer linha do DRE para ver detalhes/fórmula)
+              Exibindo apenas meses com lançamentos. O cabeçalho dos meses e a 1ª coluna de descrições estão congelados ao rolar.
             </p>
           </div>
         </div>
@@ -220,20 +190,20 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
         <div className="flex items-center space-x-2">
           <div className="flex items-center space-x-1 bg-slate-900 border border-slate-700 p-1 rounded-xl">
             <button
-              onClick={() => setViewMode('year')}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                viewMode === 'year' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Exibir 1 Ano (12 Méses)
-            </button>
-            <button
               onClick={() => setViewMode('all')}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
                 viewMode === 'all' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Todos os Anos
+            </button>
+            <button
+              onClick={() => setViewMode('year')}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                viewMode === 'year' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Exibir 1 Ano
             </button>
           </div>
 
@@ -274,20 +244,23 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
         </div>
       </div>
 
-      {/* Main DRE Matrix Grid */}
-      <div className="glass-panel rounded-2xl overflow-hidden border border-slate-800">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left border-collapse">
-            <thead className="bg-slate-900/90 text-slate-300 font-bold border-b border-slate-700/80 sticky top-0 z-10">
+      {/* Main DRE Matrix Grid with Frozen Headers & Sticky 1st Column */}
+      <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
+        <div className="overflow-auto max-h-[calc(100vh-280px)] scrollbar-thin">
+          <table className="w-full text-xs text-left border-separate border-spacing-0">
+            <thead className="sticky top-0 z-30 bg-slate-900 text-slate-300 font-bold border-b border-slate-700">
               <tr>
-                <th className="px-4 py-3.5 w-72 min-w-[280px] bg-slate-900 border-r border-slate-800">
+                {/* Frozen Corner Header (Top-Left Sticky) */}
+                <th className="sticky top-0 left-0 z-40 bg-slate-900 border-r border-b border-slate-800 px-4 py-3.5 w-72 min-w-[280px] shadow-sm">
                   DADOS (Linhas DRE)
                 </th>
+
+                {/* Sticky Month Headers */}
                 {displayColumns.map((col) => (
                   <th
                     key={col.yearMonth}
-                    className={`px-3 py-3.5 text-right min-w-[110px] font-mono border-r border-slate-800/60 ${
-                      col.isFuture ? 'bg-amber-950/20 text-amber-300' : 'bg-slate-900 text-slate-200'
+                    className={`sticky top-0 z-30 px-3 py-3.5 text-right min-w-[110px] font-mono border-r border-b border-slate-800/80 ${
+                      col.isFuture ? 'bg-amber-950/40 text-amber-300' : 'bg-slate-900 text-slate-200'
                     }`}
                   >
                     <div>{col.displayLabel}</div>
@@ -302,27 +275,33 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
                 let rowBg = 'hover:bg-slate-800/30';
                 let labelStyle = 'text-slate-300 font-medium';
                 let valStyle = 'text-slate-300 font-mono';
+                let stickyColBg = 'bg-[#0F172A]';
 
                 if (line.key === 'margem_bruta_val') {
                   rowBg = 'bg-emerald-950/20 font-bold border-y border-emerald-500/30';
                   labelStyle = 'text-emerald-400 font-bold uppercase tracking-wider';
                   valStyle = 'text-emerald-400 font-mono font-bold';
+                  stickyColBg = 'bg-[#062016]';
                 } else if (line.key === 'margem_bruta_pct') {
                   rowBg = 'bg-emerald-950/10 font-semibold';
                   labelStyle = 'text-emerald-300/80 font-semibold pl-4';
                   valStyle = 'text-emerald-300 font-mono';
+                  stickyColBg = 'bg-[#041710]';
                 } else if (line.key === 'resultado') {
                   rowBg = 'bg-blue-950/20 font-bold border-y border-blue-500/30';
                   labelStyle = 'text-blue-400 font-bold uppercase tracking-wider';
                   valStyle = 'text-blue-400 font-mono font-bold';
+                  stickyColBg = 'bg-[#081a33]';
                 } else if (line.key === 'resultado_final') {
                   rowBg = 'bg-indigo-950/30 font-bold border-y-2 border-indigo-500/40';
                   labelStyle = 'text-indigo-300 font-bold uppercase tracking-wider';
                   valStyle = 'text-indigo-300 font-mono font-bold';
+                  stickyColBg = 'bg-[#0d1733]';
                 } else if (line.key === 'margem_liquida_pct') {
                   rowBg = 'bg-indigo-950/10 font-semibold';
                   labelStyle = 'text-indigo-300/80 font-semibold pl-4';
                   valStyle = 'text-indigo-300 font-mono';
+                  stickyColBg = 'bg-[#091024]';
                 } else if (line.category === 'RECEITA') {
                   labelStyle = 'text-slate-200 font-semibold italic pl-2';
                 } else if (line.category === 'DESPESA' || line.category === 'CUSTO') {
@@ -340,8 +319,10 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
                       isActiveClicked ? 'ring-1 ring-blue-500/50 bg-blue-950/20' : ''
                     }`}
                   >
-                    {/* DRE Line Label */}
-                    <td className="px-4 py-2.5 border-r border-slate-800 bg-dark-800/80">
+                    {/* Frozen 1st Column (Sticky Left) */}
+                    <td
+                      className={`sticky left-0 z-20 px-4 py-2.5 border-r border-b border-slate-800 ${stickyColBg} shadow-sm`}
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] font-mono text-slate-500 italic uppercase w-12">{line.category}</span>
@@ -365,7 +346,7 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
                       }
 
                       return (
-                        <td key={col.yearMonth} className={`px-3 py-2.5 text-right border-r border-slate-800/60 ${valStyle}`}>
+                        <td key={col.yearMonth} className={`px-3 py-2.5 text-right border-r border-b border-slate-800/60 ${valStyle}`}>
                           {displayVal}
                         </td>
                       );
