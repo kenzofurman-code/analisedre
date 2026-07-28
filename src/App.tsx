@@ -222,9 +222,11 @@ export function App() {
 
   const handleClearAllProjects = async () => {
     if (window.confirm('Tem certeza que deseja limpar todo o cadastro de projetos e apagar do Firebase?')) {
-      isRemoteUpdate.current = false;
+      isRemoteUpdate.current = true;
       setProjects([]);
       await storageService.clearProjects();
+      isRemoteUpdate.current = false;
+      await storageService.saveData({ transactions, projects: [], settings });
     }
   };
 
@@ -284,9 +286,13 @@ export function App() {
 
   const handleClearAllTransactions = async () => {
     if (window.confirm('Tem certeza que deseja limpar todos os lançamentos do banco de dados e apagar do Firebase?')) {
-      isRemoteUpdate.current = false;
+      // Set BEFORE clearing to prevent debounce from re-saving the old state
+      isRemoteUpdate.current = true;
       setTransactions([]);
       await storageService.clearTransactions();
+      // Now save the clean empty state explicitly
+      isRemoteUpdate.current = false;
+      await storageService.saveData({ transactions: [], projects, settings });
     }
   };
 
