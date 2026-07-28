@@ -1,13 +1,16 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, setDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, setDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 
 export interface StorageAdapter {
   getTransactions: () => Promise<any[]>;
   saveTransactions: (txs: any[]) => Promise<void>;
+  subscribeTransactions: (callback: (txs: any[]) => void) => () => void;
   getProjects: () => Promise<any[]>;
   saveProjects: (projects: any[]) => Promise<void>;
+  subscribeProjects: (callback: (projects: any[]) => void) => () => void;
   getSettings: () => Promise<any>;
   saveSettings: (settings: any) => Promise<void>;
+  subscribeSettings: (callback: (settings: any) => void) => () => void;
 }
 
 const firebaseConfig = {
@@ -51,15 +54,39 @@ class FirestoreStorageAdapter implements StorageAdapter {
 
   async saveTransactions(txs: any[]): Promise<void> {
     localStorage.setItem('dre_transactions', JSON.stringify(txs));
-    if (db) {
+    if (db && txs.length > 0) {
       try {
-        for (const tx of txs) {
-          await setDoc(doc(db, 'transactions', tx.id), tx);
+        const CHUNK_SIZE = 450;
+        for (let i = 0; i < txs.length; i += CHUNK_SIZE) {
+          const batch = writeBatch(db);
+          const chunk = txs.slice(i, i + CHUNK_SIZE);
+          chunk.forEach((tx) => {
+            batch.set(doc(db!, 'transactions', tx.id), tx);
+          });
+          await batch.commit();
         }
       } catch (err) {
-        console.error('Erro ao salvar no Firestore:', err);
+        console.error('Erro ao salvar no Firestore (batch):', err);
       }
     }
+  }
+
+  subscribeTransactions(callback: (txs: any[]) => void): () => void {
+    if (!db) return () => {};
+    return onSnapshot(
+      collection(db, 'transactions'),
+      (snapshot) => {
+        const txs: any[] = [];
+        snapshot.forEach((docSnap) => txs.push(docSnap.data()));
+        if (txs.length > 0) {
+          localStorage.setItem('dre_transactions', JSON.stringify(txs));
+          callback(txs);
+        }
+      },
+      (error) => {
+        console.error('Erro no listener em tempo real de transactions:', error);
+      }
+    );
   }
 
   async getProjects(): Promise<any[]> {
@@ -80,15 +107,35 @@ class FirestoreStorageAdapter implements StorageAdapter {
 
   async saveProjects(projects: any[]): Promise<void> {
     localStorage.setItem('dre_projects', JSON.stringify(projects));
-    if (db) {
+    if (db && projects.length > 0) {
       try {
-        for (const p of projects) {
-          await setDoc(doc(db, 'projects', p.id), p);
-        }
+        const batch = writeBatch(db);
+        projects.forEach((p) => {
+          batch.set(doc(db!, 'projects', p.id), p);
+        });
+        await batch.commit();
       } catch (err) {
         console.error('Erro ao salvar projetos no Firestore:', err);
       }
     }
+  }
+
+  subscribeProjects(callback: (projects: any[]) => void): () => void {
+    if (!db) return () => {};
+    return onSnapshot(
+      collection(db, 'projects'),
+      (snapshot) => {
+        const projects: any[] = [];
+        snapshot.forEach((docSnap) => projects.push(docSnap.data()));
+        if (projects.length > 0) {
+          localStorage.setItem('dre_projects', JSON.stringify(projects));
+          callback(projects);
+        }
+      },
+      (error) => {
+        console.error('Erro no listener em tempo real de projetos:', error);
+      }
+    );
   }
 
   async getSettings(): Promise<any> {
@@ -105,6 +152,23 @@ class FirestoreStorageAdapter implements StorageAdapter {
         console.error('Erro ao salvar settings no Firestore:', err);
       }
     }
+  }
+
+  subscribeSettings(callback: (settings: any) => void): () => void {
+    if (!db) return () => {};
+    return onSnapshot(
+      doc(db, 'settings', 'global'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const settings = docSnap.data();
+          localStorage.setItem('dre_settings', JSON.stringify(settings));
+          callback(settings);
+        }
+      },
+      (error) => {
+        console.error('Erro no listener em tempo real de settings:', error);
+      }
+    );
   }
 }
 

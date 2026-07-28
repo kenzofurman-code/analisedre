@@ -50,7 +50,41 @@ export function App() {
     return merged;
   });
 
-  // Save & Sync Data
+  // Real-time synchronization for Projects, Transactions, and Settings across multiple devices
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+
+    setSyncStatus('syncing');
+
+    const unsubscribeProjects = storageService.subscribeProjects((remoteProjects) => {
+      if (remoteProjects && remoteProjects.length > 0) {
+        setProjects(remoteProjects);
+        setSyncStatus('synced');
+      }
+    });
+
+    const unsubscribeTransactions = storageService.subscribeTransactions((remoteTxs) => {
+      if (remoteTxs && remoteTxs.length > 0) {
+        setTransactions(remoteTxs);
+        setSyncStatus('synced');
+      }
+    });
+
+    const unsubscribeSettings = storageService.subscribeSettings((remoteSettings) => {
+      if (remoteSettings) {
+        setSettings(remoteSettings);
+        setSyncStatus('synced');
+      }
+    });
+
+    return () => {
+      unsubscribeProjects();
+      unsubscribeTransactions();
+      unsubscribeSettings();
+    };
+  }, []);
+
+  // Save & Sync Data upon state mutations
   useEffect(() => {
     const syncData = async () => {
       setSyncStatus('syncing');
