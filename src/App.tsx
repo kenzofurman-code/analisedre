@@ -12,9 +12,9 @@ import { DRETransaction, GlobalFinancialSettings, ProjectContract, SyncStatus } 
 import { INITIAL_PROJECTS, INITIAL_SETTINGS, generateInitialTransactions } from './services/initialData';
 import { calculateMonthlyDRE } from './services/dreCalculator';
 import { storageService, isFirebaseConfigured } from './services/firebaseConfig';
-import { generateEstouroTransactions } from './utils/excelParser';
+import { generateEstouroTransactions, generateEstimatedTeamCostTransactions } from './utils/excelParser';
 
-const DATA_VERSION = 'v4.0_estouro_contratada_line';
+const DATA_VERSION = 'v5.0_estimated_team_cost_generated';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
@@ -43,7 +43,9 @@ export function App() {
     localStorage.setItem('dre_data_version', DATA_VERSION);
     const initial = generateInitialTransactions();
     const initialEstouro = generateEstouroTransactions(INITIAL_PROJECTS);
-    const merged = [...initialEstouro, ...initial];
+    const initialEstimatedTeam = generateEstimatedTeamCostTransactions(INITIAL_PROJECTS);
+
+    const merged = [...initialEstouro, ...initialEstimatedTeam, ...initial];
     localStorage.setItem('dre_transactions', JSON.stringify(merged));
     return merged;
   });
@@ -97,12 +99,15 @@ export function App() {
 
       // Auto Generate Estouro Transactions for projects with estouroContratada
       const estouroTxs = generateEstouroTransactions(updatedList);
-      if (estouroTxs.length > 0) {
-        setTransactions((prevTxs) => {
-          const filteredTxs = prevTxs.filter((t) => t.dreLineKey !== 'estouro_contratada');
-          return [...estouroTxs, ...filteredTxs];
-        });
-      }
+      // Auto Generate Estimated Team Cost Transactions for projects from Col J & Max(D, E, G)
+      const estimatedTeamTxs = generateEstimatedTeamCostTransactions(updatedList);
+
+      setTransactions((prevTxs) => {
+        const filteredTxs = prevTxs.filter(
+          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-')
+        );
+        return [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
+      });
 
       return updatedList;
     });
@@ -123,9 +128,12 @@ export function App() {
     if (window.confirm('Deseja restaurar o cadastro de projetos inicial?')) {
       setProjects(INITIAL_PROJECTS);
       const estouroTxs = generateEstouroTransactions(INITIAL_PROJECTS);
+      const estimatedTeamTxs = generateEstimatedTeamCostTransactions(INITIAL_PROJECTS);
       setTransactions((prevTxs) => {
-        const filteredTxs = prevTxs.filter((t) => t.dreLineKey !== 'estouro_contratada');
-        return [...estouroTxs, ...filteredTxs];
+        const filteredTxs = prevTxs.filter(
+          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-')
+        );
+        return [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
       });
     }
   };
@@ -133,13 +141,14 @@ export function App() {
   const handleAddProject = (newProj: ProjectContract) => {
     setProjects((prev) => {
       const updated = [newProj, ...prev];
-      if (newProj.estouroContratada && Math.abs(newProj.estouroContratada) > 0) {
-        const estouroTxs = generateEstouroTransactions(updated);
-        setTransactions((prevTxs) => {
-          const filteredTxs = prevTxs.filter((t) => t.dreLineKey !== 'estouro_contratada');
-          return [...estouroTxs, ...filteredTxs];
-        });
-      }
+      const estouroTxs = generateEstouroTransactions(updated);
+      const estimatedTeamTxs = generateEstimatedTeamCostTransactions(updated);
+      setTransactions((prevTxs) => {
+        const filteredTxs = prevTxs.filter(
+          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-')
+        );
+        return [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
+      });
       return updated;
     });
   };

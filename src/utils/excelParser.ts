@@ -130,7 +130,7 @@ export function detectSpreadsheetPreset(workbook: XLSX.WorkBook): SpreadsheetPre
       preset: 'INFORMAÇÕES_PROJETOS',
       mode: 'projects_register',
       presetTitle: 'Cadastro de Projetos (INFORMAÇÕES_PROJETOS.xlsx)',
-      presetDescription: 'Detecção Automática: Planilha oficial com cadastro, prazos, orçamentos e cláusulas de todas as 24 obras.',
+      presetDescription: 'Detecção Automática: Planilha oficial com cadastro, prazos, orçamentos, cláusulas e estimativa de equipe por mês.',
     };
   }
 
@@ -372,6 +372,56 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
   }
 
   return Object.values(projectsMap) as ProjectContract[];
+}
+
+/**
+ * Generate Estimated Team Cost Transactions from Project Register (Prazo Obras Cols D, E, G, J)
+ */
+export function generateEstimatedTeamCostTransactions(
+  projects: ProjectContract[],
+  currentDateStr: string = new Date().toISOString().slice(0, 7)
+): DRETransaction[] {
+  const transactions: DRETransaction[] = [];
+
+  projects.forEach((p) => {
+    const custoMensal = p.custoEquipeMensal || p.estimatedMonthlyTeamCost || 0;
+    const mesD = p.mesInicial || 0;
+    const mesE = p.mesCvco || 0;
+    const mesG = p.mesEntregaUnidades || 0;
+    const maxMonths = Math.max(mesD, mesE, mesG) || p.realMonths || p.initialMonths || 24;
+
+    if (custoMensal > 0 && p.startDate) {
+      const startParsed = parseExcelDateYM(p.startDate, 2023);
+      let [y, m] = [startParsed.year, startParsed.month];
+
+      for (let step = 0; step < maxMonths; step++) {
+        const ym = `${y}-${String(m).padStart(2, '0')}`;
+        const isFuture = ym > currentDateStr;
+
+        transactions.push({
+          id: `est-team-${p.id || p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${ym}`,
+          project: p.name,
+          date: ym,
+          dreLineKey: 'custos_equipe',
+          amount: custoMensal,
+          status: isFuture ? 'projetado' : 'realizado',
+          isAutoForecast: isFuture,
+          description: `Custo Estimado Mensal de Equipe (Cronograma ${p.name})`,
+          sourceFile: 'INFORMAÇÕES_PROJETOS.xlsx',
+          sourceSheet: 'Prazo Obras',
+          createdAt: new Date().toISOString(),
+        });
+
+        m++;
+        if (m > 12) {
+          m = 1;
+          y++;
+        }
+      }
+    }
+  });
+
+  return transactions;
 }
 
 /**
