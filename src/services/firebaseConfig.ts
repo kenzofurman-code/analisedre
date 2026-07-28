@@ -32,6 +32,10 @@ const app = isFirebaseConfigured
 
 export const db = app ? getFirestore(app) : null;
 
+function sanitizePayload(payload: any): any {
+  return JSON.parse(JSON.stringify(payload));
+}
+
 class FirestoreStorageAdapter implements StorageAdapter {
   async getData(): Promise<{ transactions: any[]; projects: any[]; settings: any } | null> {
     if (!db) {
@@ -61,10 +65,17 @@ class FirestoreStorageAdapter implements StorageAdapter {
   }
 
   async saveData(data: { transactions: any[]; projects: any[]; settings: any }): Promise<{ success: boolean; error?: string }> {
-    localStorage.setItem('dre_transactions', JSON.stringify(data.transactions || []));
-    localStorage.setItem('dre_projects', JSON.stringify(data.projects || []));
-    if (data.settings) {
-      localStorage.setItem('dre_settings', JSON.stringify(data.settings));
+    const cleanData = sanitizePayload({
+      transactions: data.transactions || [],
+      projects: data.projects || [],
+      settings: data.settings || {},
+      updatedAt: new Date().toISOString(),
+    });
+
+    localStorage.setItem('dre_transactions', JSON.stringify(cleanData.transactions));
+    localStorage.setItem('dre_projects', JSON.stringify(cleanData.projects));
+    if (cleanData.settings) {
+      localStorage.setItem('dre_settings', JSON.stringify(cleanData.settings));
     }
 
     if (!isFirebaseConfigured) {
@@ -76,12 +87,7 @@ class FirestoreStorageAdapter implements StorageAdapter {
     }
 
     try {
-      await setDoc(doc(db, 'dre_store', 'main_db'), {
-        transactions: data.transactions || [],
-        projects: data.projects || [],
-        settings: data.settings || {},
-        updatedAt: new Date().toISOString(),
-      });
+      await setDoc(doc(db, 'dre_store', 'main_db'), cleanData);
       return { success: true };
     } catch (err: any) {
       console.error('Erro ao salvar no Firestore:', err);
@@ -94,12 +100,13 @@ class FirestoreStorageAdapter implements StorageAdapter {
     localStorage.setItem('dre_projects', '[]');
     if (!db) return;
     try {
-      await setDoc(doc(db, 'dre_store', 'main_db'), {
+      const payload = sanitizePayload({
         transactions: [],
         projects: [],
         settings: {},
         updatedAt: new Date().toISOString(),
       });
+      await setDoc(doc(db, 'dre_store', 'main_db'), payload);
     } catch (err) {
       console.error('Erro ao limpar Firestore:', err);
     }
@@ -110,12 +117,13 @@ class FirestoreStorageAdapter implements StorageAdapter {
     if (!db) return;
     try {
       const current = await this.getData();
-      await setDoc(doc(db, 'dre_store', 'main_db'), {
+      const payload = sanitizePayload({
         transactions: [],
         projects: current?.projects || [],
         settings: current?.settings || {},
         updatedAt: new Date().toISOString(),
       });
+      await setDoc(doc(db, 'dre_store', 'main_db'), payload);
     } catch (err) {
       console.error('Erro ao limpar transactions no Firestore:', err);
     }
@@ -126,12 +134,13 @@ class FirestoreStorageAdapter implements StorageAdapter {
     if (!db) return;
     try {
       const current = await this.getData();
-      await setDoc(doc(db, 'dre_store', 'main_db'), {
+      const payload = sanitizePayload({
         transactions: current?.transactions || [],
         projects: [],
         settings: current?.settings || {},
         updatedAt: new Date().toISOString(),
       });
+      await setDoc(doc(db, 'dre_store', 'main_db'), payload);
     } catch (err) {
       console.error('Erro ao limpar projetos no Firestore:', err);
     }
