@@ -14,7 +14,7 @@ import { calculateMonthlyDRE } from './services/dreCalculator';
 import { storageService, isFirebaseConfigured } from './services/firebaseConfig';
 import { generateEstouroTransactions, generateEstimatedTeamCostTransactions } from './utils/excelParser';
 
-const DATA_VERSION = 'v8.0_clean_slate_no_residuals';
+const DATA_VERSION = 'v8.1_purge_old_team_cost_residuals';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
@@ -173,8 +173,14 @@ export function App() {
       const estimatedTeamTxs = generateEstimatedTeamCostTransactions(updatedList);
 
       setTransactions((prevTxs) => {
+        // PURGE ALL OLD ESTIMATED TEAM COSTS & ESTOURO TRANSACTIONS FROM PREVIOUS IMPORTS
         const filteredTxs = prevTxs.filter(
-          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-') && !t.id.startsWith('seed-')
+          (t) =>
+            t.dreLineKey !== 'estouro_contratada' &&
+            !(t.dreLineKey === 'custos_equipe' && (t.id.startsWith('est-team-') || t.sourceFile === 'INFORMAÇÕES_PROJETOS.xlsx' || t.sourceSheet === 'Prazo Obras')) &&
+            !t.id.startsWith('est-team-') &&
+            !t.id.startsWith('estouro-') &&
+            !t.id.startsWith('seed-')
         );
         const mergedTxs = [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
         storageService.saveData({ transactions: mergedTxs, projects: updatedList, settings });
@@ -211,7 +217,12 @@ export function App() {
       const estimatedTeamTxs = generateEstimatedTeamCostTransactions(INITIAL_PROJECTS);
       setTransactions((prevTxs) => {
         const filteredTxs = prevTxs.filter(
-          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-') && !t.id.startsWith('seed-')
+          (t) =>
+            t.dreLineKey !== 'estouro_contratada' &&
+            !(t.dreLineKey === 'custos_equipe' && (t.id.startsWith('est-team-') || t.sourceFile === 'INFORMAÇÕES_PROJETOS.xlsx' || t.sourceSheet === 'Prazo Obras')) &&
+            !t.id.startsWith('est-team-') &&
+            !t.id.startsWith('estouro-') &&
+            !t.id.startsWith('seed-')
         );
         const mergedTxs = [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
         storageService.saveData({ transactions: mergedTxs, projects: INITIAL_PROJECTS, settings });
@@ -228,7 +239,12 @@ export function App() {
       const estimatedTeamTxs = generateEstimatedTeamCostTransactions(updated);
       setTransactions((prevTxs) => {
         const filteredTxs = prevTxs.filter(
-          (t) => t.dreLineKey !== 'estouro_contratada' && !t.id.startsWith('est-team-') && !t.id.startsWith('seed-')
+          (t) =>
+            t.dreLineKey !== 'estouro_contratada' &&
+            !(t.dreLineKey === 'custos_equipe' && (t.id.startsWith('est-team-') || t.sourceFile === 'INFORMAÇÕES_PROJETOS.xlsx' || t.sourceSheet === 'Prazo Obras')) &&
+            !t.id.startsWith('est-team-') &&
+            !t.id.startsWith('estouro-') &&
+            !t.id.startsWith('seed-')
         );
         const mergedTxs = [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
         storageService.saveData({ transactions: mergedTxs, projects: updated, settings });
