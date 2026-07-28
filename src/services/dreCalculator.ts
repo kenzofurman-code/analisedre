@@ -158,9 +158,37 @@ export function calculateMonthlyDRE(
     };
 
     const monthTx = filtered.filter((t) => t.date === ym);
+
+    let grossRevenueTerceiros = 0;
+    let grossRevenueInterna = 0;
+
     monthTx.forEach((t) => {
+      // Find matching project type
+      const matchedProj = projects.find(
+        (p) => p.name.toLowerCase().trim() === t.project.toLowerCase().trim()
+      );
+      const isInterna = matchedProj?.type === 'Interna';
+
+      // Zero out taxes for Interna projects
+      if (isInterna && (t.dreLineKey === 'impostos' || t.dreLineKey === 'irpj_csll')) {
+        return;
+      }
+
       if (t.dreLineKey in values && t.dreLineKey !== 'custos_equipe') {
         values[t.dreLineKey] += t.amount;
+      }
+
+      if (
+        t.dreLineKey === 'receita_taxa_adm' ||
+        t.dreLineKey === 'permuta_taxa_adm' ||
+        t.dreLineKey === 'receita_mo_adm' ||
+        t.dreLineKey === 'receita_assistencia'
+      ) {
+        if (isInterna) {
+          grossRevenueInterna += t.amount;
+        } else {
+          grossRevenueTerceiros += t.amount;
+        }
       }
     });
 
@@ -202,12 +230,11 @@ export function calculateMonthlyDRE(
 
     values.custos_equipe = computedTeamCostMonth;
 
-    const grossRevenue =
-      values.receita_taxa_adm + values.permuta_taxa_adm + values.receita_mo_adm + values.receita_assistencia;
+    const grossRevenue = grossRevenueTerceiros + grossRevenueInterna;
 
-    // FALLBACK FORMULA 1: Impostos sobre Faturamento (PIS + COFINS + ISS)
-    if (values.impostos === 0 && grossRevenue > 0) {
-      values.impostos = grossRevenue * (settings.taxRatePercent / 100);
+    // Impostos (PIS, COFINS, ISS) calculados EXCLUSIVAMENTE para Obras de Terceiros (Obras Internas ficam 0,00)
+    if (values.impostos === 0 && grossRevenueTerceiros > 0) {
+      values.impostos = grossRevenueTerceiros * (settings.taxRatePercent / 100);
     }
 
     // ADM Expense Rateio Calculation
@@ -248,9 +275,9 @@ export function calculateMonthlyDRE(
 
     values.resultado = values.margem_bruta_val - values.despesas_adm_pie;
 
-    // FALLBACK FORMULA 2: IRPJ + CSLL calculados sobre Todas as Receitas (Receita Bruta Total)
-    if (values.irpj_csll === 0 && grossRevenue > 0) {
-      values.irpj_csll = grossRevenue * (settings.irpjCsllPercent / 100);
+    // IRPJ + CSLL calculados EXCLUSIVAMENTE para Obras de Terceiros (Obras Internas ficam 0,00)
+    if (values.irpj_csll === 0 && grossRevenueTerceiros > 0) {
+      values.irpj_csll = grossRevenueTerceiros * (settings.irpjCsllPercent / 100);
     }
 
     values.resultado_final = values.resultado - values.irpj_csll;
