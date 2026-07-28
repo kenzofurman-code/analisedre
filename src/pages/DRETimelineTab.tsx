@@ -69,20 +69,36 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
     return activeMonthlyColumns.filter((col) => col.yearMonth.startsWith(selectedYear));
   }, [activeMonthlyColumns, selectedYear, viewMode]);
 
-  // Totals calculation for displayColumns
-  const totalReceitaBruta = displayColumns.reduce(
-    (acc, col) =>
-      acc +
-      col.values.receita_taxa_adm +
-      col.values.permuta_taxa_adm +
-      col.values.receita_mo_adm +
-      col.values.receita_assistencia,
-    0
-  );
+  // Totals calculation for displayColumns (Ensures Card and Column 2 are 100% synchronized)
+  const totalReceitaBruta = useMemo(() => {
+    return displayColumns.reduce(
+      (acc, col) =>
+        acc +
+        col.values.receita_taxa_adm +
+        col.values.permuta_taxa_adm +
+        col.values.receita_mo_adm +
+        col.values.receita_assistencia,
+      0
+    );
+  }, [displayColumns]);
 
-  const totalMargemBruta = displayColumns.reduce((acc, col) => acc + col.values.margem_bruta_val, 0);
-  const totalResultadoFinal = displayColumns.reduce((acc, col) => acc + col.values.resultado_final, 0);
-  const totalMargemLiquidaPct = totalReceitaBruta > 0 ? (totalResultadoFinal / totalReceitaBruta) * 100 : 0;
+  const totalMargemBruta = useMemo(() => {
+    return displayColumns.reduce((acc, col) => acc + col.values.margem_bruta_val, 0);
+  }, [displayColumns]);
+
+  const totalResultadoFinal = useMemo(() => {
+    return displayColumns.reduce((acc, col) => acc + col.values.resultado_final, 0);
+  }, [displayColumns]);
+
+  const totalMargemBrutaPct = useMemo(() => {
+    if (Math.abs(totalReceitaBruta) < 0.01) return 0;
+    return (totalMargemBruta / Math.abs(totalReceitaBruta)) * 100;
+  }, [totalMargemBruta, totalReceitaBruta]);
+
+  const totalMargemLiquidaPct = useMemo(() => {
+    if (Math.abs(totalReceitaBruta) < 0.01) return 0;
+    return (totalResultadoFinal / Math.abs(totalReceitaBruta)) * 100;
+  }, [totalResultadoFinal, totalReceitaBruta]);
 
   const handlePrevYear = () => {
     const currIdx = availableYears.indexOf(selectedYear);
@@ -164,7 +180,7 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Margem Líquida %</p>
             <h3 className="text-xl font-bold text-indigo-400 mt-1">{formatPercent(totalMargemLiquidaPct)}</h3>
-            <p className="text-[10px] text-slate-500 mt-1">Rentabilidade sobre vendas</p>
+            <p className="text-[10px] text-slate-500 mt-1">Rentabilidade acumulada sobre vendas</p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
             <Percent className="w-5 h-5" />
@@ -319,10 +335,10 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
                 let formattedTotal = '-';
 
                 if (line.key === 'margem_bruta_pct') {
-                  totalLineVal = totalReceitaBruta > 0 ? (totalMargemBruta / totalReceitaBruta) * 100 : 0;
+                  totalLineVal = totalMargemBrutaPct;
                   formattedTotal = formatPercent(totalLineVal);
                 } else if (line.key === 'margem_liquida_pct') {
-                  totalLineVal = totalReceitaBruta > 0 ? (totalResultadoFinal / totalReceitaBruta) * 100 : 0;
+                  totalLineVal = totalMargemLiquidaPct;
                   formattedTotal = formatPercent(totalLineVal);
                 } else if (line.key === 'curva_fisica_obra') {
                   totalLineVal = displayColumns.length > 0 ? displayColumns.reduce((acc, c) => acc + (c.values.curva_fisica_obra || 0), 0) / displayColumns.length : 0;
