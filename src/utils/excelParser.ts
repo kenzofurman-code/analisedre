@@ -30,14 +30,14 @@ export function parseExcelFileSheets(fileBuffer: ArrayBuffer): { sheetNames: str
 }
 
 /**
- * Robust Multilingual Universal Date Parser for Excel Cells
+ * Universal Multilingual Date Parser supporting Brazilian (DD/MM/YYYY) and Excel US formats (M/D/YY)
  */
 export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: string; year: number; month: number } {
   if (dateVal === undefined || dateVal === null || String(dateVal).trim() === '') {
     return { ym: `${fallbackYear}-01`, year: fallbackYear, month: 1 };
   }
 
-  // 1. Handle JS Date Objects (from cellDates: true)
+  // 1. JS Date Objects (from cellDates: true)
   if (typeof dateVal === 'object' && dateVal instanceof Date && !isNaN(dateVal.getTime())) {
     const y = dateVal.getUTCFullYear();
     const m = dateVal.getUTCMonth() + 1;
@@ -47,7 +47,7 @@ export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: strin
 
   const str = String(dateVal).trim();
 
-  // 2. Handle Numeric Excel Serial Dates (e.g. 45170, 44805)
+  // 2. Numeric Excel Serial Dates (e.g. 46082 = 2026-03, 45170 = 2023-09)
   const numSerial = typeof dateVal === 'number' ? dateVal : parseFloat(str);
   if (!isNaN(numSerial) && numSerial > 30000 && numSerial < 60000 && !str.includes('/') && !str.includes('-')) {
     const utcDays = Math.floor(numSerial - 25569);
@@ -59,7 +59,7 @@ export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: strin
     return { ym: `${year}-${String(m).padStart(2, '0')}`, year, month: m };
   }
 
-  // 3. Handle ISO Dates (YYYY-MM-DD or YYYY-MM)
+  // 3. ISO Date (YYYY-MM-DD or YYYY-MM)
   const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})/);
   if (isoMatch) {
     const y = parseInt(isoMatch[1], 10);
@@ -68,7 +68,7 @@ export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: strin
     return { ym: `${year}-${String(m).padStart(2, '0')}`, year, month: m };
   }
 
-  // 4. Multilingual Month Name Parsing (Portuguese, English, Spanish)
+  // 4. Multilingual Month Names (e.g. Sep/2023, Set/2023, Sep-23, Mai-24)
   const monthNamesMap: Record<string, number> = {
     jan: 1, january: 1, janeiro: 1, enero: 1,
     fev: 2, feb: 2, february: 2, fevereiro: 2, febrero: 2,
@@ -98,32 +98,35 @@ export function parseExcelDateYM(dateVal: any, fallbackYear = 2024): { ym: strin
     }
   }
 
-  // 5. Handle Slash / Dash Dates (D/M/Y or M/D/Y)
+  // 5. Slash / Dash Dates (handles both BR DD/MM/YYYY and US M/D/YY from Excel formatting)
   const slashMatch = str.match(/^(\d{1,2})[/.-](\d{1,2})([/.-](\d{2,4}))?/);
   if (slashMatch) {
-    const part1 = parseInt(slashMatch[1], 10);
-    const part2 = parseInt(slashMatch[2], 10);
-    const part4 = slashMatch[4];
+    const p1 = parseInt(slashMatch[1], 10);
+    const p2 = parseInt(slashMatch[2], 10);
+    const yearRaw = slashMatch[4];
 
-    if (part4) {
-      let year = parseInt(part4, 10);
-      if (part4.length === 2) year += 2000;
+    let year = fallbackYear;
+    if (yearRaw) {
+      const yVal = parseInt(yearRaw, 10);
+      year = yearRaw.length === 2 ? 2000 + yVal : yVal;
       if (year < 2010) year = fallbackYear;
-
-      let month = part2;
-      if (part1 <= 12 && (part2 === 1 || part1 > part2)) {
-        month = part1;
-      } else if (part2 <= 12 && part1 > 12) {
-        month = part2;
-      }
-      return { ym: `${year}-${String(month).padStart(2, '0')}`, year, month };
-    } else {
-      let month = part1;
-      if (part1 <= 31 && part2 <= 12) {
-        month = part2;
-      }
-      return { ym: `${fallbackYear}-${String(month).padStart(2, '0')}`, year: fallbackYear, month };
     }
+
+    let month = 1;
+    // If p2 is 1 (day 1 of month in US M/D/YY from Excel formatting), p1 is the Month! (e.g. 3/1/26 = March, 4/1/26 = April)
+    if (p2 === 1 && p1 <= 12) {
+      month = p1;
+    } else if (p1 > 12 && p2 <= 12) {
+      // BR DD/MM/YYYY where day > 12 (e.g. 25/03/2024 -> month 3)
+      month = p2;
+    } else if (p2 <= 12) {
+      // Standard BR DD/MM/YYYY (Day / Month / Year)
+      month = p2;
+    } else if (p1 <= 12) {
+      month = p1;
+    }
+
+    return { ym: `${year}-${String(month).padStart(2, '0')}`, year, month };
   }
 
   return { ym: `${fallbackYear}-01`, year: fallbackYear, month: 1 };
@@ -714,7 +717,10 @@ export function processExcelImport(
   dataRows.forEach((row, rowIdx) => {
     if (!row || row.length === 0) return;
 
-    const dateVal = config.mapping.dateCol !== undefined && config.mapping.dateCol !== '' ? row[parseInt(config.mapping.dateCol, 10)] : null;
+    const rRealIdx = startIdx + rowIdx;
+    const dateCellData = config.mapping.dateCol !== undefined && config.mapping.dateCol !== '' ? getCellData(rRealIdx, parseInt(config.mapping.dateCol, 10)) : { rawVal: null, formattedVal: null };
+    const dateVal = dateCellData.rawVal || dateCellData.formattedVal || (config.mapping.dateCol ? row[parseInt(config.mapping.dateCol, 10)] : null);
+
     const amountVal = config.mapping.amountCol !== undefined && config.mapping.amountCol !== '' ? row[parseInt(config.mapping.amountCol, 10)] : null;
     const projectVal = config.mapping.projectCol !== undefined && config.mapping.projectCol !== '' ? row[parseInt(config.mapping.projectCol, 10)] : config.preselectedProject;
     const statusVal = config.mapping.statusCol !== undefined && config.mapping.statusCol !== '' ? row[parseInt(config.mapping.statusCol, 10)] : config.preselectedStatus || 'realizado';
