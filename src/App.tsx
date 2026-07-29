@@ -14,7 +14,7 @@ import { calculateMonthlyDRE } from './services/dreCalculator';
 import { storageService, isFirebaseConfigured } from './services/firebaseConfig';
 import { generateEstouroTransactions, generateEstimatedTeamCostTransactions } from './utils/excelParser';
 
-const DATA_VERSION = 'v8.1_purge_old_team_cost_residuals';
+const DATA_VERSION = 'v9.0_firebase_first_sync';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
@@ -23,6 +23,7 @@ export function App() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(isFirebaseConfigured ? 'synced' : 'offline');
 
   const isRemoteUpdate = useRef(false);
+  const isLoadedFromRemote = useRef(!isFirebaseConfigured); // If no Firebase, local is immediately ready
 
   const [settings, setSettings] = useState<GlobalFinancialSettings>(() => {
     const saved = localStorage.getItem('dre_settings');
@@ -30,34 +31,16 @@ export function App() {
   });
 
   const [projects, setProjects] = useState<ProjectContract[]>(() => {
-    const savedVersion = localStorage.getItem('dre_data_version');
     const saved = localStorage.getItem('dre_projects');
-
-    if (savedVersion === DATA_VERSION && saved) {
-      const parsed: ProjectContract[] = JSON.parse(saved);
-      return parsed;
-    }
-
-    localStorage.setItem('dre_data_version', DATA_VERSION);
-    localStorage.removeItem('dre_projects');
-    return [];
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [transactions, setTransactions] = useState<DRETransaction[]>(() => {
-    const savedVersion = localStorage.getItem('dre_data_version');
     const saved = localStorage.getItem('dre_transactions');
-
-    if (savedVersion === DATA_VERSION && saved) {
-      const parsed: DRETransaction[] = JSON.parse(saved);
-      return parsed.filter((t) => !t.id.startsWith('seed-'));
-    }
-
-    localStorage.setItem('dre_data_version', DATA_VERSION);
-    localStorage.removeItem('dre_transactions');
-    return [];
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // 1. Subscribe to Realtime Firestore updates across devices (No loop)
+  // 1. First priority on any access/device: Subscribe to Realtime Firestore updates
   useEffect(() => {
     if (!isFirebaseConfigured) return;
 
@@ -65,31 +48,14 @@ export function App() {
 
     const unsubscribe = storageService.subscribeData((remote) => {
       isRemoteUpdate.current = true;
+      isLoadedFromRemote.current = true;
+
       if (remote.projects !== undefined) {
-        setProjects(remote.projects);
+        setProjects(remote.projects || []);
       }
       if (remote.transactions !== undefined) {
-        // Purge ALL residual estimated team cost transactions from old imports
-        // These will be regenerated fresh from the current project list
-        const cleanTxs = (remote.transactions || []).filter((t: any) =>
-          !t.id.startsWith('seed-') &&
-          !(
-            t.dreLineKey === 'custos_equipe' &&
-            (t.id.startsWith('est-team-') || t.sourceSheet === 'Prazo Obras' || t.sourceFile === 'INFORMAÇÕES_PROJETOS.xlsx')
-          )
-        );
+        const cleanTxs = (remote.transactions || []).filter((t: any) => !t.id.startsWith('seed-'));
         setTransactions(cleanTxs);
-
-        // Regenerate fresh estimated team costs from projects in Firebase
-        if (remote.projects && remote.projects.length > 0) {
-          const freshTeamTxs = generateEstimatedTeamCostTransactions(remote.projects);
-          setTransactions((prev) => {
-            const map = new Map<string, any>();
-            prev.forEach((t) => map.set(t.id, t));
-            freshTeamTxs.forEach((t) => map.set(t.id, t));
-            return Array.from(map.values());
-          });
-        }
       }
       if (remote.settings && Object.keys(remote.settings).length > 0) {
         setSettings((prev) => ({ ...prev, ...remote.settings }));
@@ -100,8 +66,13 @@ export function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Debounced save to Firestore upon local state changes (Protected by isRemoteUpdate)
+  // 2. Debounced save to Firestore ONLY AFTER remote data has been loaded at least once
   useEffect(() => {
+    // Prevent auto-saving uninitialized/empty state on new computers before Firebase loads
+    if (!isLoadedFromRemote.current) {
+      return;
+    }
+
     if (isRemoteUpdate.current) {
       isRemoteUpdate.current = false;
       return;
@@ -126,8 +97,9 @@ export function App() {
           const remote = await storageService.getData();
           if (remote) {
             isRemoteUpdate.current = true;
+            isLoadedFromRemote.current = true;
             if (remote.projects !== undefined) {
-              setProjects(remote.projects);
+              setProjects(remote.projects || []);
             }
             if (remote.transactions !== undefined) {
               const cleanTxs = (remote.transactions || []).filter((t: any) => !t.id.startsWith('seed-'));
@@ -158,7 +130,9 @@ export function App() {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
       isRemoteUpdate.current = false;
-      storageService.saveData({ transactions, projects, settings: updated });
+      if (isLoadedFromRemote.current) {
+        storageService.saveData({ transactions, projects, settings: updated });
+      }
       return updated;
     });
   };
@@ -192,7 +166,7 @@ export function App() {
       const estimatedTeamTxs = generateEstimatedTeamCostTransactions(updatedList);
 
       setTransactions((prevTxs) => {
-        // PURGE ALL OLD ESTIMATED TEAM COSTS & ESTOURO TRANSACTIONS FROM PREVIOUS IMPORTS
+        // PURGE OLD TEAM COST & ESTOURO TRANSACTIONS WHEN RE-IMPORTING INFORMAÇÕES_PROJETOS
         const filteredTxs = prevTxs.filter(
           (t) =>
             t.dreLineKey !== 'estouro_contratada' &&
@@ -286,11 +260,9 @@ export function App() {
 
   const handleClearAllTransactions = async () => {
     if (window.confirm('Tem certeza que deseja limpar todos os lançamentos do banco de dados e apagar do Firebase?')) {
-      // Set BEFORE clearing to prevent debounce from re-saving the old state
       isRemoteUpdate.current = true;
       setTransactions([]);
       await storageService.clearTransactions();
-      // Now save the clean empty state explicitly
       isRemoteUpdate.current = false;
       await storageService.saveData({ transactions: [], projects, settings });
     }
