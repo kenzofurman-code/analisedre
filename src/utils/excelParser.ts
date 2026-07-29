@@ -331,6 +331,8 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
     const name = String(r[0]).trim();
     if (name.toLowerCase() === 'obra' || name.toLowerCase().includes('total')) continue;
 
+    const mapKey = name.toLowerCase(); // Case-insensitive key
+
     const startDate = formatExcelDateStr(r[1], '2023-01-01');
     const baselineEnd = formatExcelDateStr(r[2], '2025-12-01');
     const replannedEnd = r[5] ? formatExcelDateStr(r[5]) : baselineEnd;
@@ -348,7 +350,7 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
     const pagamentoMultaVal = parseNum(r[13]);
     const riscoMultaVal = parseNum(r[17]);
 
-    projectsMap[name] = {
+    projectsMap[mapKey] = {
       id: `proj-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
       name,
       type: 'Terceiros',
@@ -375,15 +377,17 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
     };
   }
 
-  // 2. Process Custo Obras
+  // 2. Process Custo Obras (uses case-insensitive lookup to match Prazo Obras names)
   for (let i = 1; i < custoRows.length; i++) {
     const r = custoRows[i];
     if (!r || !r[0]) continue;
     const name = String(r[0]).trim();
     if (name.toLowerCase() === 'obra' || name.toLowerCase().includes('total')) continue;
 
-    if (!projectsMap[name]) {
-      projectsMap[name] = {
+    const mapKey = name.toLowerCase(); // Case-insensitive key
+
+    if (!projectsMap[mapKey]) {
+      projectsMap[mapKey] = {
         id: `proj-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
         name,
         startDate: '2023-01-01',
@@ -395,7 +399,7 @@ export function parseProjectsInfoSheet(workbook: XLSX.WorkBook): ProjectContract
       };
     }
 
-    const p = projectsMap[name];
+    const p = projectsMap[mapKey];
     const rawType = String(r[1] || '').toLowerCase();
     p.type = rawType.includes('interna') ? 'Interna' : 'Terceiros';
 
