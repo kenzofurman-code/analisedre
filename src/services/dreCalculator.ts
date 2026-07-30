@@ -106,8 +106,7 @@ export function calculateMonthlyDRE(
       if (
         t.dreLineKey === 'receita_taxa_adm' ||
         t.dreLineKey === 'permuta_taxa_adm' ||
-        t.dreLineKey === 'receita_mo_adm' ||
-        t.dreLineKey === 'receita_assistencia'
+        t.dreLineKey === 'receita_mo_adm'
       ) {
         globalMonthlyRevenue[t.date] += t.amount;
 
@@ -238,18 +237,20 @@ export function calculateMonthlyDRE(
     values.custos_equipe = computedTeamCostMonth;
 
     const grossRevenue = grossRevenueTerceiros + grossRevenueInterna;
+    const admBaseRevenue =
+      values.receita_taxa_adm + values.permuta_taxa_adm + values.receita_mo_adm;
 
     // Impostos (PIS, COFINS, ISS) calculados EXCLUSIVAMENTE para Obras de Terceiros e EXCLUINDO receita de assistência técnica
     if (values.impostos === 0 && taxableRevenueTerceiros > 0) {
       values.impostos = taxableRevenueTerceiros * (settings.taxRatePercent / 100);
     }
 
-    // ADM Expense Rateio Calculation
+    // ADM Expense Rateio Calculation (excluding Receita de Assistência Técnica)
     const globalRevMonth = globalMonthlyRevenue[ym] || 0;
     const globalTotalADM = globalRevMonth * (settings.admExpensePercent / 100);
 
     if (isGlobal) {
-      values.despesas_adm_pie = grossRevenue * (settings.admExpensePercent / 100);
+      values.despesas_adm_pie = admBaseRevenue * (settings.admExpensePercent / 100);
     } else {
       const activeCount = globalActiveProjectsInMonth[ym]?.size || 1;
       let totalAllocatedADM = 0;
