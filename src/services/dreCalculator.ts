@@ -193,7 +193,8 @@ export function calculateMonthlyDRE(
           grossRevenueInterna += t.amount;
         } else {
           grossRevenueTerceiros += t.amount;
-          if (t.dreLineKey !== 'receita_assistencia') {
+          const isHallDesign = t.project && t.project.toLowerCase().trim().includes('hall');
+          if (t.dreLineKey !== 'receita_assistencia' || isHallDesign) {
             taxableRevenueTerceiros += t.amount;
           }
         }
