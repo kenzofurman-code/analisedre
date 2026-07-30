@@ -165,6 +165,7 @@ export function calculateMonthlyDRE(
 
     let grossRevenueTerceiros = 0;
     let grossRevenueInterna = 0;
+    let taxableRevenueTerceiros = 0;
 
     monthTx.forEach((t) => {
       // Find matching project type
@@ -192,6 +193,9 @@ export function calculateMonthlyDRE(
           grossRevenueInterna += t.amount;
         } else {
           grossRevenueTerceiros += t.amount;
+          if (t.dreLineKey !== 'receita_assistencia') {
+            taxableRevenueTerceiros += t.amount;
+          }
         }
       }
     });
@@ -234,9 +238,9 @@ export function calculateMonthlyDRE(
 
     const grossRevenue = grossRevenueTerceiros + grossRevenueInterna;
 
-    // Impostos (PIS, COFINS, ISS) calculados EXCLUSIVAMENTE para Obras de Terceiros (Obras Internas ficam 0,00)
-    if (values.impostos === 0 && grossRevenueTerceiros > 0) {
-      values.impostos = grossRevenueTerceiros * (settings.taxRatePercent / 100);
+    // Impostos (PIS, COFINS, ISS) calculados EXCLUSIVAMENTE para Obras de Terceiros e EXCLUINDO receita de assistência técnica
+    if (values.impostos === 0 && taxableRevenueTerceiros > 0) {
+      values.impostos = taxableRevenueTerceiros * (settings.taxRatePercent / 100);
     }
 
     // ADM Expense Rateio Calculation
@@ -277,9 +281,9 @@ export function calculateMonthlyDRE(
 
     values.resultado = values.margem_bruta_val - values.despesas_adm_pie;
 
-    // IRPJ + CSLL calculados EXCLUSIVAMENTE para Obras de Terceiros (Obras Internas ficam 0,00)
-    if (values.irpj_csll === 0 && grossRevenueTerceiros > 0) {
-      values.irpj_csll = grossRevenueTerceiros * (settings.irpjCsllPercent / 100);
+    // IRPJ + CSLL calculados EXCLUSIVAMENTE para Obras de Terceiros e EXCLUINDO receita de assistência técnica
+    if (values.irpj_csll === 0 && taxableRevenueTerceiros > 0) {
+      values.irpj_csll = taxableRevenueTerceiros * (settings.irpjCsllPercent / 100);
     }
 
     values.resultado_final = values.resultado - values.irpj_csll;
