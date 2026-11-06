@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DRETransaction, ProjectContract, TransactionStatus } from '../types/dre';
 import { DRE_LINE_DEFINITIONS } from '../constants/dreStructure';
-import { Search, Filter, Trash2, Plus, Tag, FileText, Layers, Info } from 'lucide-react';
+import { Search, Filter, Trash2, Plus, Tag, FileText, Layers, Info, ChevronDown } from 'lucide-react';
 
 interface DataQueryTabProps {
   transactions: DRETransaction[];
@@ -122,25 +122,46 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
     }
   };
 
-  const getStatusBadge = (tx: DRETransaction) => {
-    if (tx.status === 'realizado') {
-      return (
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-          Realizado
-        </span>
-      );
-    }
-    if (tx.status === 'projetado') {
-      return (
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30">
-          Projetado (Futuro) {tx.isAutoForecast && '⚡'}
-        </span>
-      );
-    }
+  const handleStatusChange = (tx: DRETransaction, newStatus: TransactionStatus) => {
+    if (newStatus === tx.status) return;
+    const updatedTx: DRETransaction = {
+      ...tx,
+      status: newStatus,
+      isAutoForecast: newStatus === 'projetado' ? tx.isAutoForecast : false,
+      isEdited: true,
+      updatedAt: new Date().toISOString(),
+    };
+    onUpdateTransaction(updatedTx);
+  };
+
+  const renderStatusCell = (tx: DRETransaction) => {
     return (
-      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-purple-500/10 text-purple-400 border border-purple-500/30">
-        Previsto Inicial (Viabilidade)
-      </span>
+      <div className="relative inline-flex items-center justify-center group">
+        <select
+          value={tx.status}
+          onChange={(e) => handleStatusChange(tx, e.target.value as TransactionStatus)}
+          title="Clique para alterar o status contábil deste lançamento"
+          aria-label={`Status contábil de ${tx.project} - ${tx.date}`}
+          className={`px-2.5 py-1 pr-6 rounded-full text-[10px] font-bold uppercase cursor-pointer border transition-all appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 shadow-sm ${
+            tx.status === 'realizado'
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/60'
+              : tx.status === 'projetado'
+              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20 hover:border-amber-500/60'
+              : 'bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20 hover:border-purple-500/60'
+          }`}
+        >
+          <option value="realizado" className="bg-slate-900 text-emerald-400 font-semibold py-1">
+            Realizado
+          </option>
+          <option value="projetado" className="bg-slate-900 text-amber-400 font-semibold py-1">
+            Projetado (Futuro) {tx.isAutoForecast ? '⚡' : ''}
+          </option>
+          <option value="previsto_inicial" className="bg-slate-900 text-purple-400 font-semibold py-1">
+            Previsto Inicial (Viabilidade)
+          </option>
+        </select>
+        <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60 group-hover:opacity-100 transition-opacity text-current" />
+      </div>
     );
   };
 
@@ -155,7 +176,7 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
           <div>
             <h3 className="text-base font-bold text-slate-100">Consulta da Base de Dados Importada</h3>
             <p className="text-xs text-slate-400">
-              Total de {filtered.length} lançamentos (Clique diretamente sobre qualquer valor para editar)
+              Total de {filtered.length} lançamentos (Clique diretamente sobre qualquer valor ou status para editar)
             </p>
           </div>
         </div>
@@ -250,7 +271,7 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
                 <th className="px-4 py-3 border-r border-slate-800">Projeto / Obra</th>
                 <th className="px-4 py-3 border-r border-slate-800">Linha DRE Mapeada</th>
                 <th className="px-4 py-3 border-r border-slate-800 text-right">Valor (R$) ✏️</th>
-                <th className="px-4 py-3 border-r border-slate-800 text-center">Status Contábil</th>
+                <th className="px-4 py-3 border-r border-slate-800 text-center">Status Contábil ✏️</th>
                 <th className="px-4 py-3 border-r border-slate-800">Descrição</th>
                 <th className="px-4 py-3 border-r border-slate-800 text-blue-400">
                   <div className="flex items-center space-x-1">
@@ -328,7 +349,7 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
                     </td>
 
                     <td className="px-4 py-2.5 text-center border-r border-slate-800/50">
-                      {getStatusBadge(tx)}
+                      {renderStatusCell(tx)}
                     </td>
                     <td className="px-4 py-2.5 text-slate-300 border-r border-slate-800/50 truncate max-w-xs">{tx.description}</td>
                     <td className="px-4 py-2.5 text-blue-300 font-mono text-[11px] border-r border-slate-800/50 truncate max-w-xs">
