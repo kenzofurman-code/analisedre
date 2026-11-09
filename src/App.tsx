@@ -249,6 +249,29 @@ export function App() {
     });
   };
 
+  const handleUpdateProject = (updatedProj: ProjectContract) => {
+    isRemoteUpdate.current = false;
+    setProjects((prev) => {
+      const updated = prev.map((p) => (p.id === updatedProj.id ? updatedProj : p));
+      const estouroTxs = generateEstouroTransactions(updated);
+      const estimatedTeamTxs = generateEstimatedTeamCostTransactions(updated);
+      setTransactions((prevTxs) => {
+        const filteredTxs = prevTxs.filter(
+          (t) =>
+            t.dreLineKey !== 'estouro_contratada' &&
+            !(t.dreLineKey === 'custos_equipe' && (t.id.startsWith('est-team-') || t.sourceFile === 'INFORMAÇÕES_PROJETOS.xlsx' || t.sourceSheet === 'Prazo Obras')) &&
+            !t.id.startsWith('est-team-') &&
+            !t.id.startsWith('estouro-') &&
+            !t.id.startsWith('seed-')
+        );
+        const mergedTxs = [...estouroTxs, ...estimatedTeamTxs, ...filteredTxs];
+        storageService.saveData({ transactions: mergedTxs, projects: updated, settings });
+        return mergedTxs;
+      });
+      return updated;
+    });
+  };
+
   const handleDeleteTransaction = (id: string) => {
     isRemoteUpdate.current = false;
     setTransactions((prev) => {
@@ -378,6 +401,7 @@ export function App() {
               onDeleteProject={handleDeleteProject}
               onClearAllProjects={handleClearAllProjects}
               onAddProject={handleAddProject}
+              onUpdateProject={handleUpdateProject}
               onResetProjects={handleResetProjects}
             />
           )}

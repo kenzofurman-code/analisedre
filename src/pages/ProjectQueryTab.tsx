@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ProjectContract } from '../types/dre';
-import { Search, Building2, Trash2, Plus, RefreshCw, Briefcase, Clock, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Search, Building2, Trash2, Plus, RefreshCw, Briefcase, Clock, ShieldCheck, AlertTriangle, Pencil, X, Check } from 'lucide-react';
 
 interface ProjectQueryTabProps {
   projects: ProjectContract[];
@@ -8,6 +8,7 @@ interface ProjectQueryTabProps {
   onDeleteProject: (projectId: string) => void;
   onClearAllProjects: () => void;
   onAddProject: (project: ProjectContract) => void;
+  onUpdateProject?: (project: ProjectContract) => void;
   onResetProjects: () => void;
 }
 
@@ -17,6 +18,7 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
   onDeleteProject,
   onClearAllProjects,
   onAddProject,
+  onUpdateProject,
   onResetProjects,
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -35,6 +37,53 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
   const [newProjecaoRaso, setNewProjecaoRaso] = useState<number>(8000000);
   const [newOrcamentoTotal, setNewOrcamentoTotal] = useState<number>(10000000);
   const [newProjecaoTotal, setNewProjecaoTotal] = useState<number>(10000000);
+
+  // Editing Project Modal State
+  const [editingProject, setEditingProject] = useState<ProjectContract | null>(null);
+
+  const handleStartEditProject = (p: ProjectContract) => {
+    setEditingProject({ ...p });
+  };
+
+  const handleSaveEditProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProject || !editingProject.name.trim()) return;
+
+    const baseRaso = editingProject.orcamentoRasoReajustado || 0;
+    const projRaso = editingProject.projecaoRasoAtual !== undefined ? editingProject.projecaoRasoAtual : baseRaso;
+    const resultRaso = baseRaso - projRaso;
+
+    const baseTotal = editingProject.orcamentoTotalReajustado || editingProject.contractValue || 0;
+    const projTotal = editingProject.projectedCostAtCompletion !== undefined ? editingProject.projectedCostAtCompletion : baseTotal;
+    const resultTotal = baseTotal - projTotal;
+
+    const mesInicial = editingProject.initialMonths || editingProject.mesInicial || 24;
+    const mesCvco = editingProject.mesCvco || 0;
+    const mesEntrega = editingProject.mesEntregaUnidades || 0;
+    const realMonths = Math.max(mesInicial, mesCvco, mesEntrega);
+
+    const custoMensal = editingProject.custoEquipeMensal || editingProject.estimatedMonthlyTeamCost || 28000;
+    const prazoOrcStr = editingProject.prazoOrcamentoStr || `${mesInicial}`;
+    const prazoOrcNum = parseFloat(prazoOrcStr.split('/')[0]) || mesInicial;
+    const custoOrcEquipe = editingProject.custoOrcamentoEquipe || (prazoOrcNum * custoMensal);
+
+    const updatedProj: ProjectContract = {
+      ...editingProject,
+      name: editingProject.name.trim(),
+      resultadoRasoAtual: resultRaso,
+      resultAtCompletion: resultTotal,
+      premioEconomia: resultTotal > 0 ? resultTotal * 0.4 : 0,
+      realMonths,
+      estimatedMonthlyTeamCost: custoMensal,
+      custoEquipeMensal: custoMensal,
+      custoOrcamentoEquipe: custoOrcEquipe,
+    };
+
+    if (onUpdateProject) {
+      onUpdateProject(updatedProj);
+    }
+    setEditingProject(null);
+  };
 
   const filtered = projects.filter((p) => {
     const isGlobal = selectedProjects.includes('all') || selectedProjects.length === 0;
@@ -363,6 +412,15 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
                     {p.type}
                   </span>
 
+                  {/* Botão de Editar (Lapizinho) */}
+                  <button
+                    onClick={() => handleStartEditProject(p)}
+                    className="p-1 rounded text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors"
+                    title="Editar informações do projeto"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+
                   <button
                     onClick={() => onDeleteProject(p.id)}
                     className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
@@ -513,6 +571,321 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
                   className="px-5 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-600/25"
                 >
                   Cadastrar Projeto
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Edit Project Modal */}
+      {editingProject && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-dark-800 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl my-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-700">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-xl">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-100">Editar Projeto: {editingProject.name}</h4>
+                  <p className="text-xs text-slate-400">Edição manual de dados, prazos, orçamentos e equipe da obra</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingProject(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditProject} className="space-y-4">
+              {/* Seção 1: Identificação & Tipologia */}
+              <div className="space-y-3">
+                <h5 className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center space-x-1.5">
+                  <Building2 className="w-4 h-4" />
+                  <span>1. Identificação & Tipologia</span>
+                </h5>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="text-[11px] font-semibold text-slate-300">Nome da Obra:</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingProject.name}
+                      onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Tipologia Contratual:</label>
+                    <select
+                      value={editingProject.type}
+                      onChange={(e) => setEditingProject({ ...editingProject, type: e.target.value as any })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="Terceiros">Terceiros (Externa)</option>
+                      <option value="Interna">Interna (Própria)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-300">Valor do Contrato (R$):</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingProject.contractValue || 0}
+                    onChange={(e) => setEditingProject({ ...editingProject, contractValue: parseFloat(e.target.value) || 0 })}
+                    className="w-full bg-slate-900 border border-slate-700 text-xs text-emerald-400 font-mono font-bold rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Seção 2: Prazos & Cronograma */}
+              <div className="space-y-3 pt-3 border-t border-slate-800">
+                <h5 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center space-x-1.5">
+                  <Clock className="w-4 h-4" />
+                  <span>2. Prazos & Cronograma da Obra</span>
+                </h5>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Data Início Base:</label>
+                    <input
+                      type="date"
+                      value={editingProject.startDate ? editingProject.startDate.slice(0, 10) : ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, startDate: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-blue-300 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Término Inicial:</label>
+                    <input
+                      type="date"
+                      value={editingProject.baselineEndDate ? editingProject.baselineEndDate.slice(0, 10) : ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, baselineEndDate: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-300 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Término Replanejado:</label>
+                    <input
+                      type="date"
+                      value={editingProject.replannedEndDate ? editingProject.replannedEndDate.slice(0, 10) : ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, replannedEndDate: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-amber-300 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Prazo Inicial (Meses):</label>
+                    <input
+                      type="number"
+                      value={editingProject.initialMonths || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, initialMonths: parseInt(e.target.value, 10) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Mês CVCO (Meses):</label>
+                    <input
+                      type="number"
+                      value={editingProject.mesCvco || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, mesCvco: parseInt(e.target.value, 10) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Mês Entrega (Meses):</label>
+                    <input
+                      type="number"
+                      value={editingProject.mesEntregaUnidades || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, mesEntregaUnidades: parseInt(e.target.value, 10) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Dias de Atraso:</label>
+                    <input
+                      type="number"
+                      value={editingProject.diasAtraso || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, diasAtraso: parseInt(e.target.value, 10) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-rose-300 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Seção 3: Custos de Equipe */}
+              <div className="space-y-3 pt-3 border-t border-slate-800">
+                <h5 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center space-x-1.5">
+                  <Briefcase className="w-4 h-4" />
+                  <span>3. Custos de Equipe</span>
+                </h5>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Custo Equipe Mensal (R$/mês):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProject.custoEquipeMensal ?? editingProject.estimatedMonthlyTeamCost ?? 28000}
+                      onChange={(e) => setEditingProject({
+                        ...editingProject,
+                        custoEquipeMensal: parseFloat(e.target.value) || 0,
+                        estimatedMonthlyTeamCost: parseFloat(e.target.value) || 0,
+                      })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-emerald-400 font-mono font-bold rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Prazo Orçamento Equipe:</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 24 ou 24/18"
+                      value={editingProject.prazoOrcamentoStr || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, prazoOrcamentoStr: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Custo Orçamento Equipe Total (R$):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProject.custoOrcamentoEquipe || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, custoOrcamentoEquipe: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Seção 4: Custos & Orçamentos (4 Linhas) */}
+              <div className="space-y-3 pt-3 border-t border-slate-800">
+                <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>4. Orçamentos, Projeções & Custos</span>
+                </h5>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">1. Orçamento Raso Reajustado (R$):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProject.orcamentoRasoReajustado || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, orcamentoRasoReajustado: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Projeção Raso Atual (R$):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProject.projecaoRasoAtual || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, projecaoRasoAtual: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">3. Orçamento Total Reajustado (R$):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProject.orcamentoTotalReajustado || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, orcamentoTotalReajustado: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Projeção Custo Total na Conclusão (R$):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProject.projectedCostAtCompletion || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, projectedCostAtCompletion: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-300">Estouro Suportado Contratada (R$):</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingProject.estouroContratada || 0}
+                    onChange={(e) => setEditingProject({ ...editingProject, estouroContratada: parseFloat(e.target.value) || 0 })}
+                    className="w-full bg-slate-900 border border-slate-700 text-xs text-rose-400 font-mono font-bold rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Seção 5: Multas & Cláusulas */}
+              <div className="space-y-3 pt-3 border-t border-slate-800">
+                <h5 className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center space-x-1.5">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>5. Multas & Cláusulas Contratuais</span>
+                </h5>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Risco / Valor da Multa (R$):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProject.riscoMultaVal ?? editingProject.valorMulta ?? 0}
+                      onChange={(e) => setEditingProject({
+                        ...editingProject,
+                        riscoMultaVal: parseFloat(e.target.value) || 0,
+                        valorMulta: parseFloat(e.target.value) || 0,
+                      })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-rose-300 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Multa Percentual (%):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProject.multaPercent || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, multaPercent: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-300">Cláusula Custo / Observações:</label>
+                  <textarea
+                    rows={2}
+                    value={editingProject.clausulaCusto || ''}
+                    onChange={(e) => setEditingProject({ ...editingProject, clausulaCusto: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    placeholder="Ex: Cláusula de compartilhamento de economia 60/40 com teto..."
+                  />
+                </div>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="flex justify-end space-x-2 pt-4 border-t border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setEditingProject(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center space-x-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-600/25 transition-all cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Salvar Alterações</span>
                 </button>
               </div>
             </form>
