@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DRETransaction, ProjectContract, TransactionStatus } from '../types/dre';
+import { DRETransaction, ProjectContract, TransactionStatus, DRELineKey } from '../types/dre';
 import { DRE_LINE_DEFINITIONS } from '../constants/dreStructure';
 import { Search, Filter, Trash2, Plus, Tag, FileText, Layers, Info, ChevronDown } from 'lucide-react';
 
@@ -41,6 +41,10 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
   // Inline Cell Editing State (stores ID of cell being edited)
   const [editingCellId, setEditingCellId] = useState<string | null>(null);
   const [editingCellVal, setEditingCellVal] = useState<string>('');
+
+  // Inline Date Editing State
+  const [editingDateId, setEditingDateId] = useState<string | null>(null);
+  const [editingDateVal, setEditingDateVal] = useState<string>('');
 
   const filtered = transactions.filter((t) => {
     const isGlobalProj = selectedProjects.includes('all') || selectedProjects.length === 0;
@@ -122,6 +126,46 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
     }
   };
 
+  // Start inline date editing
+  const handleStartDateEdit = (tx: DRETransaction) => {
+    setEditingDateId(tx.id);
+    setEditingDateVal(tx.date || '');
+  };
+
+  // Save inline date editing
+  const handleSaveDateEdit = (tx: DRETransaction) => {
+    if (editingDateVal && editingDateVal !== tx.date) {
+      const updatedTx: DRETransaction = {
+        ...tx,
+        date: editingDateVal,
+        isEdited: true,
+        updatedAt: new Date().toISOString(),
+      };
+      onUpdateTransaction(updatedTx);
+    }
+    setEditingDateId(null);
+  };
+
+  const handleKeyDownDate = (e: React.KeyboardEvent, tx: DRETransaction) => {
+    if (e.key === 'Enter') {
+      handleSaveDateEdit(tx);
+    } else if (e.key === 'Escape') {
+      setEditingDateId(null);
+    }
+  };
+
+  // Direct DRE line key change
+  const handleLineChange = (tx: DRETransaction, newLineKey: DRELineKey) => {
+    if (newLineKey === tx.dreLineKey) return;
+    const updatedTx: DRETransaction = {
+      ...tx,
+      dreLineKey: newLineKey,
+      isEdited: true,
+      updatedAt: new Date().toISOString(),
+    };
+    onUpdateTransaction(updatedTx);
+  };
+
   const handleStatusChange = (tx: DRETransaction, newStatus: TransactionStatus) => {
     if (newStatus === tx.status) return;
     const updatedTx: DRETransaction = {
@@ -176,7 +220,7 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
           <div>
             <h3 className="text-base font-bold text-slate-100">Consulta da Base de Dados Importada</h3>
             <p className="text-xs text-slate-400">
-              Total de {filtered.length} lançamentos (Clique diretamente sobre qualquer valor ou status para editar)
+              Total de {filtered.length} lançamentos (Clique diretamente sobre qualquer data, linha, valor ou status para editar)
             </p>
           </div>
         </div>
@@ -267,9 +311,9 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
           <table className="w-full text-xs text-left text-slate-300 border-collapse">
             <thead className="bg-slate-900 text-slate-400 font-semibold sticky top-0 z-10 border-b border-slate-800">
               <tr>
-                <th className="px-4 py-3 border-r border-slate-800">Data/Competência</th>
+                <th className="px-4 py-3 border-r border-slate-800">Data/Competência ✏️</th>
                 <th className="px-4 py-3 border-r border-slate-800">Projeto / Obra</th>
-                <th className="px-4 py-3 border-r border-slate-800">Linha DRE Mapeada</th>
+                <th className="px-4 py-3 border-r border-slate-800">Linha DRE Mapeada ✏️</th>
                 <th className="px-4 py-3 border-r border-slate-800 text-right">Valor (R$) ✏️</th>
                 <th className="px-4 py-3 border-r border-slate-800 text-center">Status Contábil ✏️</th>
                 <th className="px-4 py-3 border-r border-slate-800">Descrição</th>
@@ -298,10 +342,49 @@ export const DataQueryTab: React.FC<DataQueryTabProps> = ({
               ) : (
                 filtered.map((tx) => (
                   <tr key={tx.id} className="border-b border-slate-800/40 hover:bg-slate-800/30">
-                    <td className="px-4 py-2.5 font-mono text-slate-300 border-r border-slate-800/50">{tx.date}</td>
+                    {/* DIRECT INLINE EDITING DATE CELL */}
+                    <td className="px-3 py-1.5 font-mono border-r border-slate-800/50">
+                      {editingDateId === tx.id ? (
+                        <input
+                          type="month"
+                          autoFocus
+                          value={editingDateVal}
+                          onChange={(e) => setEditingDateVal(e.target.value)}
+                          onBlur={() => handleSaveDateEdit(tx)}
+                          onKeyDown={(e) => handleKeyDownDate(e, tx)}
+                          className="bg-slate-900 border-2 border-blue-500 rounded-lg px-2 py-1 text-xs font-mono font-bold text-blue-300 focus:outline-none shadow-lg cursor-pointer"
+                        />
+                      ) : (
+                        <div
+                          onClick={() => handleStartDateEdit(tx)}
+                          title="Clique para editar a data de competência"
+                          className="inline-flex items-center space-x-1.5 group cursor-pointer px-2 py-1 rounded hover:bg-blue-600/10 hover:border hover:border-blue-500/40 transition-all text-slate-300 hover:text-blue-300"
+                        >
+                          <span>{tx.date}</span>
+                        </div>
+                      )}
+                    </td>
+
                     <td className="px-4 py-2.5 font-semibold text-blue-400 border-r border-slate-800/50">{tx.project}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-200 border-r border-slate-800/50">
-                      {DRE_LINE_DEFINITIONS.find((d) => d.key === tx.dreLineKey)?.label || tx.dreLineKey}
+
+                    {/* DIRECT INLINE EDITING DRE LINE CELL */}
+                    <td className="px-3 py-1.5 border-r border-slate-800/50">
+                      <div className="relative inline-flex items-center group w-full min-w-[200px]">
+                        <select
+                          value={tx.dreLineKey}
+                          onChange={(e) => handleLineChange(tx, e.target.value as DRELineKey)}
+                          title="Clique para alterar a linha DRE deste lançamento"
+                          aria-label={`Linha DRE de ${tx.project} - ${tx.date}`}
+                          className="w-full bg-slate-900/60 hover:bg-slate-800 border border-slate-700/60 hover:border-blue-500/60 text-slate-200 text-xs font-medium rounded-lg px-2.5 py-1 pr-7 cursor-pointer transition-all appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                        >
+                          {DRE_LINE_DEFINITIONS.filter((d) => !d.isCalculated || d.key === tx.dreLineKey).map((d) => (
+                            <option key={d.key} value={d.key} className="bg-slate-900 text-slate-100 py-1">
+                              {d.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-blue-400 transition-colors" />
+                      </div>
                     </td>
 
                     {/* DIRECT INLINE EDITING AMOUNT CELL */}
