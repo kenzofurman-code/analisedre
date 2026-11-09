@@ -76,7 +76,7 @@ export const ProjectComparisonTab: React.FC<ProjectComparisonTabProps> = ({ proj
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-100">Matriz Comparativa de Performance entre Obras</h3>
-            <p className="text-xs text-slate-400">Análise lado a lado de receitas, custos diretos, rateio ADM e margem líquida</p>
+            <p className="text-xs text-slate-400">Análise lado a lado de receitas, custos diretos, rateio ADM e margem operacional</p>
           </div>
         </div>
       </div>
@@ -191,7 +191,7 @@ export const ProjectComparisonTab: React.FC<ProjectComparisonTabProps> = ({ proj
 
               <tr className="bg-purple-950/20 font-bold">
                 <td className="px-4 py-3 border-r border-slate-800 bg-dark-800/80 font-bold text-purple-300">
-                  Margem Líquida (%)
+                  Margem Operacional (%)
                 </td>
                 {comparisonData.map((d) => (
                   <td

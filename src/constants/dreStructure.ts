@@ -117,10 +117,10 @@ export const DRE_LINE_DEFINITIONS: DRELineDefinition[] = [
   },
   {
     key: 'margem_liquida_pct',
-    label: 'Margem Líquida %',
+    label: 'Margem Operacional %',
     category: 'CALCULATED',
     isCalculated: true,
-    sourceOriginInfo: 'Margem de Lucratividade Líquida',
+    sourceOriginInfo: 'Margem de Lucratividade Operacional',
     formulaInfo: 'Fórmula: (Resultado Final / Receita Bruta Total) × 100',
   },
   {
@@ -130,22 +130,6 @@ export const DRE_LINE_DEFINITIONS: DRELineDefinition[] = [
     isCalculated: true,
     sourceOriginInfo: 'Receita Líquida Operacional',
     formulaInfo: 'Fórmula: Receita Bruta Total - Impostos Directos',
-  },
-  {
-    key: 'curva_fisica_obra',
-    label: 'CURVA FÍSICA OBRA %',
-    category: 'CALCULATED',
-    isCalculated: true,
-    sourceOriginInfo: 'Cronograma Físico-Financeiro',
-    formulaInfo: 'Percentual de avanço físico acumulado da obra no mês',
-  },
-  {
-    key: 'receitas_menos_impostos',
-    label: 'RECEITAS - IMPOSTOS',
-    category: 'CALCULATED',
-    isCalculated: true,
-    sourceOriginInfo: 'Entrada Líquida de Receitas',
-    formulaInfo: 'Fórmula: Receita Bruta Total - Impostos (PIS + COFINS + ISS)',
   },
 ];
 

@@ -213,7 +213,7 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({
 
         <div className="glass-panel p-5 rounded-2xl flex items-center justify-between border-l-4 border-l-indigo-500">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Margem Líquida %</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Margem Operacional %</p>
             <h3 className="text-xl font-bold text-indigo-400 mt-1">{formatPercent(totalMargemLiquidaPct)}</h3>
             <p className="text-[10px] text-slate-500 mt-1">Rentabilidade acumulada sobre vendas</p>
           </div>
@@ -445,9 +445,6 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({
                 } else if (line.key === 'margem_liquida_pct') {
                   totalLineVal = totalMargemLiquidaPct;
                   formattedTotal = formatPercent(totalLineVal);
-                } else if (line.key === 'curva_fisica_obra') {
-                  totalLineVal = displayColumns.length > 0 ? displayColumns.reduce((acc, c) => acc + (c.values.curva_fisica_obra || 0), 0) / displayColumns.length : 0;
-                  formattedTotal = formatPercent(totalLineVal);
                 } else {
                   totalLineVal = displayColumns.reduce((acc, col) => acc + (col.values[line.key] || 0), 0);
                   formattedTotal = formatMoney(totalLineVal);
@@ -494,7 +491,7 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({
                       const rawVal = col.values[line.key] || 0;
                       let displayVal = formatMoney(rawVal);
 
-                      if (line.key === 'margem_bruta_pct' || line.key === 'margem_liquida_pct' || line.key === 'curva_fisica_obra') {
+                      if (line.key === 'margem_bruta_pct' || line.key === 'margem_liquida_pct') {
                         displayVal = formatPercent(rawVal);
                       }
 

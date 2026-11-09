@@ -94,10 +94,8 @@ export function exportDRETimelineToExcel({
   // Row 18: resultado
   // Row 19: irpj_csll
   // Row 20: resultado_final
-  // Row 21: margem_liquida_pct
+  // Row 21: margem_liquida_pct (Margem Operacional %)
   // Row 22: receita_liquida
-  // Row 23: curva_fisica_obra
-  // Row 24: receitas_menos_impostos
   const dataStartRow = 6;
 
   DRE_LINE_DEFINITIONS.forEach((line, lineIdx) => {
@@ -107,7 +105,7 @@ export function exportDRETimelineToExcel({
     // Col A: Label
     ws[`A${r}`] = { t: 's', v: line.label };
 
-    const isPercent = key === 'margem_bruta_pct' || key === 'margem_liquida_pct' || key === 'curva_fisica_obra';
+    const isPercent = key === 'margem_bruta_pct' || key === 'margem_liquida_pct';
     const cellFmt = isPercent ? PERCENT_FMT : CURRENCY_FMT;
 
     // Col B: Total Formula
@@ -168,22 +166,11 @@ export function exportDRETimelineToExcel({
         v: pct,
         z: cellFmt,
       };
-    } else if (key === 'receita_liquida' || key === 'receitas_menos_impostos') {
+    } else if (key === 'receita_liquida') {
       ws[`B${r}`] = {
         t: 'n',
         f: `SUM(B6:B9)-B10`,
         v: displayColumns.reduce((acc, col) => acc + (col.values[key] || 0), 0),
-        z: cellFmt,
-      };
-    } else if (key === 'curva_fisica_obra') {
-      const avg =
-        displayColumns.length > 0
-          ? displayColumns.reduce((acc, col) => acc + (col.values.curva_fisica_obra || 0), 0) / displayColumns.length
-          : 0;
-      ws[`B${r}`] = {
-        t: 'n',
-        f: `AVERAGE(${firstMonthCol}23:${lastMonthCol}23)`,
-        v: avg / 100,
         z: cellFmt,
       };
     } else {
@@ -237,17 +224,11 @@ export function exportDRETimelineToExcel({
           v: rawVal / 100,
           z: cellFmt,
         };
-      } else if (key === 'receita_liquida' || key === 'receitas_menos_impostos') {
+      } else if (key === 'receita_liquida') {
         ws[`${colLetter}${r}`] = {
           t: 'n',
           f: `SUM(${colLetter}6:${colLetter}9)-${colLetter}10`,
           v: rawVal,
-          z: cellFmt,
-        };
-      } else if (key === 'curva_fisica_obra') {
-        ws[`${colLetter}${r}`] = {
-          t: 'n',
-          v: rawVal / 100,
           z: cellFmt,
         };
       } else {
