@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { MonthlyDREColumn, GlobalFinancialSettings } from '../types/dre';
 import { DRE_LINE_DEFINITIONS } from '../constants/dreStructure';
-import { DollarSign, TrendingUp, Percent, ChevronLeft, ChevronRight, Calendar, Info, X } from 'lucide-react';
+import { DollarSign, TrendingUp, Percent, ChevronLeft, ChevronRight, Calendar, Info, X, FileSpreadsheet } from 'lucide-react';
+import { exportDRETimelineToExcel } from '../utils/excelExporter';
 
 interface DRETimelineTabProps {
   monthlyColumns: MonthlyDREColumn[];
@@ -122,6 +123,16 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
   const formatPercent = (val: number) => {
     if (isNaN(val)) return '0,00%';
     return `${val.toFixed(2).replace('.', ',')}%`;
+  };
+
+  const handleExportSpreadsheet = () => {
+    exportDRETimelineToExcel({
+      displayColumns,
+      settings,
+      selectedProjects,
+      viewMode,
+      selectedYear,
+    });
   };
 
   const activeLineDef = useMemo(() => {
@@ -263,6 +274,16 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
               </button>
             </div>
           )}
+
+          {/* Botão Exportar Planilha */}
+          <button
+            onClick={handleExportSpreadsheet}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-md hover:shadow-emerald-600/20 transition-all cursor-pointer border border-emerald-500/40 ml-1"
+            title="Exportar visão ativa do DRE para Excel (.xlsx) com fórmulas dinâmicas"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Exportar Planilha</span>
+          </button>
         </div>
       </div>
 
