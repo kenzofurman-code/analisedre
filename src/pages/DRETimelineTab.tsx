@@ -1,21 +1,39 @@
 import React, { useState, useMemo } from 'react';
-import { MonthlyDREColumn, GlobalFinancialSettings } from '../types/dre';
+import { MonthlyDREColumn, GlobalFinancialSettings, ProjectContract } from '../types/dre';
 import { DRE_LINE_DEFINITIONS } from '../constants/dreStructure';
-import { DollarSign, TrendingUp, Percent, ChevronLeft, ChevronRight, Calendar, Info, X, FileSpreadsheet } from 'lucide-react';
+import { DollarSign, TrendingUp, Percent, ChevronLeft, ChevronRight, Calendar, Info, X, FileSpreadsheet, Landmark } from 'lucide-react';
 import { exportDRETimelineToExcel } from '../utils/excelExporter';
 
 interface DRETimelineTabProps {
   monthlyColumns: MonthlyDREColumn[];
   settings: GlobalFinancialSettings;
   selectedProjects: string[];
+  projects?: ProjectContract[];
+  onUpdateProject?: (project: ProjectContract) => void;
+  onUpdateSettings?: (settings: Partial<GlobalFinancialSettings>) => void;
 }
 
-export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, settings, selectedProjects }) => {
+export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({
+  monthlyColumns,
+  settings,
+  selectedProjects,
+  projects = [],
+  onUpdateProject,
+  onUpdateSettings,
+}) => {
   // Active clicked tooltip state (opens on click)
   const [activeTooltipLineKey, setActiveTooltipLineKey] = useState<string | null>(null);
 
   // Default view mode: "Todos os Anos" ('all')
   const [viewMode, setViewMode] = useState<'year' | 'all'>('all');
+
+  // Check if a single project is selected
+  const singleSelectedProject = useMemo(() => {
+    if (selectedProjects.length === 1 && selectedProjects[0] !== 'all') {
+      return projects.find((p) => p.name.toLowerCase().trim() === selectedProjects[0].toLowerCase().trim()) || null;
+    }
+    return null;
+  }, [selectedProjects, projects]);
 
   // Filter out months that have no financial movement at all (grossRev === 0 && costs === 0)
   const activeMonthlyColumns = useMemo(() => {
@@ -273,6 +291,66 @@ export const DRETimelineTab: React.FC<DRETimelineTabProps> = ({ monthlyColumns, 
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
+          )}
+
+          {/* Botão de Tributação da Assistência Técnica */}
+          {singleSelectedProject ? (
+            singleSelectedProject.type === 'Interna' ? (
+              <div
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-900 border border-slate-700/80 text-slate-400 text-xs font-semibold rounded-xl"
+                title="Projetos do tipo Interna não sofrem incidência de impostos sobre faturamento"
+              >
+                <Landmark className="w-3.5 h-3.5 text-slate-500" />
+                <span>Obra Interna (Isenta)</span>
+              </div>
+            ) : (
+              (() => {
+                const currentRule = singleSelectedProject.taxAssistanceRevenue || 'default';
+                const isTaxed =
+                  currentRule === 'sim' ||
+                  (currentRule !== 'nao' && settings.taxAssistanceRevenueDefault !== false);
+
+                return (
+                  <button
+                    onClick={() => {
+                      if (!onUpdateProject) return;
+                      const nextRule = isTaxed ? 'nao' : 'sim';
+                      onUpdateProject({
+                        ...singleSelectedProject,
+                        taxAssistanceRevenue: nextRule,
+                      });
+                    }}
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                      isTaxed
+                        ? 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border-blue-500/40'
+                        : 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border-amber-500/40'
+                    }`}
+                    title={`Clique para alternar a incidência de impostos sobre Assistência Técnica para ${singleSelectedProject.name} (Atualmente: ${isTaxed ? 'Tributada' : 'Isenta'})`}
+                  >
+                    <Landmark className="w-3.5 h-3.5" />
+                    <span>Assistência: {isTaxed ? 'Tributada 🏛️' : 'Isenta de Imposto 🛡️'}</span>
+                  </button>
+                );
+              })()
+            )
+          ) : (
+            <button
+              onClick={() => {
+                if (!onUpdateSettings) return;
+                onUpdateSettings({
+                  taxAssistanceRevenueDefault: !(settings.taxAssistanceRevenueDefault !== false),
+                });
+              }}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                settings.taxAssistanceRevenueDefault !== false
+                  ? 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border-blue-500/40'
+                  : 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border-amber-500/40'
+              }`}
+              title="Clique para alternar o padrão global do sistema para impostos sobre Assistência Técnica"
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              <span>Padrão Assistência: {settings.taxAssistanceRevenueDefault !== false ? 'Tributada 🏛️' : 'Isenta 🛡️'}</span>
+            </button>
           )}
 
           {/* Botão Exportar Planilha */}

@@ -91,6 +91,8 @@ export interface ProjectContract {
   custoOrcamentoEquipe?: number;
   pagamentoMultaVal?: number;
   riscoMultaVal?: number;
+  // Regra de tributação de assistência técnica para este projeto
+  taxAssistanceRevenue?: 'default' | 'sim' | 'nao';
 }
 
 export type TeamCostMode = 'real' | 'estimado';
@@ -102,6 +104,7 @@ export interface GlobalFinancialSettings {
   admAllocationMode: AdmAllocationMode;
   taxRatePercent: number;
   irpjCsllPercent: number;
+  taxAssistanceRevenueDefault?: boolean;
 }
 
 export interface ImportColumnMapping {

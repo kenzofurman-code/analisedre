@@ -371,7 +371,14 @@ export function App() {
 
         <main className="flex-1 overflow-y-auto pb-12">
           {activeTab === 'timeline' && (
-            <DRETimelineTab monthlyColumns={monthlyColumns} settings={settings} selectedProjects={selectedProjects} />
+            <DRETimelineTab
+              monthlyColumns={monthlyColumns}
+              settings={settings}
+              selectedProjects={selectedProjects}
+              projects={projects}
+              onUpdateProject={handleUpdateProject}
+              onUpdateSettings={handleUpdateSettings}
+            />
           )}
 
           {activeTab === 'cashflow' && (
@@ -403,6 +410,7 @@ export function App() {
               onAddProject={handleAddProject}
               onUpdateProject={handleUpdateProject}
               onResetProjects={handleResetProjects}
+              settings={settings}
             />
           )}
 

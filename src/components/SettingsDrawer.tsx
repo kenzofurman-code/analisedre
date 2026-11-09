@@ -150,6 +150,48 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Form Section 4: Tributação da Assistência Técnica */}
+            <div className="glass-panel p-4 rounded-2xl space-y-3">
+              <div className="flex items-center space-x-2 text-cyan-400 font-bold text-xs uppercase tracking-wider">
+                <Landmark className="w-4 h-4" />
+                <span>4. Tributação de Assistência Técnica</span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Padrão do sistema para incidência de impostos sobre a linha de <strong>Receita de Assistência Técnica</strong> em Obras de Terceiros.
+              </p>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Padrão Geral do Sistema:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateSettings({ taxAssistanceRevenueDefault: true })}
+                    className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
+                      settings.taxAssistanceRevenueDefault !== false
+                        ? 'bg-blue-600 text-white border-blue-500 shadow-md'
+                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                    }`}
+                  >
+                    🏛️ Tributar (Padrão)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateSettings({ taxAssistanceRevenueDefault: false })}
+                    className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
+                      settings.taxAssistanceRevenueDefault === false
+                        ? 'bg-amber-600 text-white border-amber-500 shadow-md'
+                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                    }`}
+                  >
+                    🛡️ Isentar de Impostos
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  * Você também pode alternar esta regra projeto por projeto no Cadastro de Projetos ou diretamente no botão da DRE.
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Footer Close Button */}

@@ -192,8 +192,21 @@ export function calculateMonthlyDRE(
           grossRevenueInterna += t.amount;
         } else {
           grossRevenueTerceiros += t.amount;
-          const isHallDesign = t.project && t.project.toLowerCase().trim().includes('hall');
-          if (t.dreLineKey !== 'receita_assistencia' || isHallDesign) {
+
+          // Regra de tributação para receita de assistência técnica:
+          // 1. Se o projeto tem regra explícita ('sim' ou 'nao'), prevalece sobre o projeto.
+          // 2. Senão, utiliza o padrão global configurado (settings.taxAssistanceRevenueDefault ?? true).
+          // 3. Mantém compatibilidade com Hall Design caso não tenha sido explicitado 'nao'.
+          let shouldTaxAssistance = settings.taxAssistanceRevenueDefault !== false;
+          if (matchedProj?.taxAssistanceRevenue === 'sim') {
+            shouldTaxAssistance = true;
+          } else if (matchedProj?.taxAssistanceRevenue === 'nao') {
+            shouldTaxAssistance = false;
+          } else if (t.project && t.project.toLowerCase().trim().includes('hall')) {
+            shouldTaxAssistance = true;
+          }
+
+          if (t.dreLineKey !== 'receita_assistencia' || shouldTaxAssistance) {
             taxableRevenueTerceiros += t.amount;
           }
         }

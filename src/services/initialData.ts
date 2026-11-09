@@ -6,6 +6,7 @@ export const INITIAL_SETTINGS: GlobalFinancialSettings = {
   admAllocationMode: 'receita',
   taxRatePercent: 9.81,
   irpjCsllPercent: 15.0,
+  taxAssistanceRevenueDefault: true,
 };
 
 export const INITIAL_PROJECTS: ProjectContract[] = [
@@ -89,6 +90,7 @@ export const INITIAL_PROJECTS: ProjectContract[] = [
     premioEconomia: 0,
     bandaPercent: 0.02,
     estimatedMonthlyTeamCost: 67040.74,
+    taxAssistanceRevenue: 'sim',
     contractNotes: 'Excesso acima de 2% suportado pela contratada. Economia 50% bonus.',
   },
   {

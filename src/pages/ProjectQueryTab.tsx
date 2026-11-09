@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ProjectContract } from '../types/dre';
-import { Search, Building2, Trash2, Plus, RefreshCw, Briefcase, Clock, ShieldCheck, AlertTriangle, Pencil, X, Check } from 'lucide-react';
+import { ProjectContract, GlobalFinancialSettings } from '../types/dre';
+import { Search, Building2, Trash2, Plus, RefreshCw, Briefcase, Clock, ShieldCheck, AlertTriangle, Pencil, X, Check, Landmark } from 'lucide-react';
 
 interface ProjectQueryTabProps {
   projects: ProjectContract[];
@@ -10,6 +10,7 @@ interface ProjectQueryTabProps {
   onAddProject: (project: ProjectContract) => void;
   onUpdateProject?: (project: ProjectContract) => void;
   onResetProjects: () => void;
+  settings?: GlobalFinancialSettings;
 }
 
 export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
@@ -20,6 +21,7 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
   onAddProject,
   onUpdateProject,
   onResetProjects,
+  settings,
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -28,6 +30,7 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
   // New Project Form State
   const [newName, setNewName] = useState<string>('');
   const [newType, setNewType] = useState<'Terceiros' | 'Interna'>('Terceiros');
+  const [newTaxAssistance, setNewTaxAssistance] = useState<'default' | 'sim' | 'nao'>('default');
   const [newStartDate, setNewStartDate] = useState<string>('2024-01-01');
   const [newBaselineEnd, setNewBaselineEnd] = useState<string>('2025-12-01');
   const [newReplannedEnd, setNewReplannedEnd] = useState<string>('2025-12-01');
@@ -129,11 +132,13 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
       premioEconomia: resultTotal > 0 ? resultTotal * 0.4 : 0,
       bandaPercent: 0.05,
       estimatedMonthlyTeamCost: 28000,
+      taxAssistanceRevenue: newTaxAssistance,
     };
 
     onAddProject(newProj);
     setShowAddModal(false);
     setNewName('');
+    setNewTaxAssistance('default');
   };
 
   // Helper Renderer for 4 Specific Cost Lines
@@ -401,7 +406,7 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5 flex-wrap justify-end gap-1">
                   <span
                     className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                       p.type === 'Terceiros'
@@ -411,6 +416,27 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
                   >
                     {p.type}
                   </span>
+
+                  {p.type === 'Terceiros' && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        p.taxAssistanceRevenue === 'sim' || (p.taxAssistanceRevenue !== 'nao' && settings?.taxAssistanceRevenueDefault !== false)
+                          ? 'bg-blue-500/10 text-blue-300 border border-blue-500/30'
+                          : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                      }`}
+                      title={
+                        p.taxAssistanceRevenue === 'sim'
+                          ? 'Assistência Técnica: Tributada (configuração manual da obra)'
+                          : p.taxAssistanceRevenue === 'nao'
+                          ? 'Assistência Técnica: Isenta (configuração manual da obra)'
+                          : `Assistência Técnica: Padrão do sistema (${settings?.taxAssistanceRevenueDefault !== false ? 'Tributada' : 'Isenta'})`
+                      }
+                    >
+                      {p.taxAssistanceRevenue === 'sim' || (p.taxAssistanceRevenue !== 'nao' && settings?.taxAssistanceRevenueDefault !== false)
+                        ? 'Assistência: Tributada'
+                        : 'Assistência: Isenta'}
+                    </span>
+                  )}
 
                   {/* Botão de Editar (Lapizinho) */}
                   <button
@@ -498,6 +524,19 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
                 >
                   <option value="Terceiros">Terceiros (Obra Externa Contratada)</option>
                   <option value="Interna">Interna (Desenvolvimento Próprio)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300">Tributação da Assistência Técnica:</label>
+                <select
+                  value={newTaxAssistance}
+                  onChange={(e) => setNewTaxAssistance(e.target.value as any)}
+                  className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-xl px-3 py-2 mt-1"
+                >
+                  <option value="default">Padrão Geral ({settings?.taxAssistanceRevenueDefault !== false ? '🏛️ Tributar' : '🛡️ Isentar'})</option>
+                  <option value="sim">🏛️ Sim (Tributar Receita de Assistência)</option>
+                  <option value="nao">🛡️ Não (Isentar dos Impostos)</option>
                 </select>
               </div>
 
@@ -633,15 +672,30 @@ export const ProjectQueryTab: React.FC<ProjectQueryTabProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-300">Valor do Contrato (R$):</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editingProject.contractValue || 0}
-                    onChange={(e) => setEditingProject({ ...editingProject, contractValue: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-slate-900 border border-slate-700 text-xs text-emerald-400 font-mono font-bold rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Valor do Contrato (R$):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProject.contractValue || 0}
+                      onChange={(e) => setEditingProject({ ...editingProject, contractValue: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-emerald-400 font-mono font-bold rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300">Tributação da Assistência Técnica:</label>
+                    <select
+                      value={editingProject.taxAssistanceRevenue || 'default'}
+                      onChange={(e) => setEditingProject({ ...editingProject, taxAssistanceRevenue: e.target.value as any })}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-xl px-3 py-2 mt-1 focus:border-blue-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="default">Padrão Geral ({settings?.taxAssistanceRevenueDefault !== false ? '🏛️ Tributar' : '🛡️ Isentar'})</option>
+                      <option value="sim">🏛️ Sim (Tributar Receita de Assistência)</option>
+                      <option value="nao">🛡️ Não (Isentar dos Impostos)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
